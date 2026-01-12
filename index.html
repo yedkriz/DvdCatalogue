@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catalog</title>
+
+  <link rel="manifest" href="assets/manifest.json" />
+  <link rel="icon" href="assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+
+<body>
+  <header class="nav">
+    <div class="brand" onclick="location.hash='#/'">Catalog</div>
+    <nav class="menu">
+      <a href="#/">Home</a>
+      <a href="#/lists">Lists</a>
+      <a href="#/new">Add item</a>
+      <a href="#/stats">Stats</a>
+    </nav>
+    <div class="actions">
+      <input id="searchInput" type="search" placeholder="Search…" />
+      <input id="typeFilter" list="typeSuggestions" placeholder="Filter by type (Blu-ray, Book…)" />
+      <datalist id="typeSuggestions">
+        <option value="Blu-ray"></option>
+        <option value="DVD"></option>
+        <option value="4K UHD"></option>
+        <option value="Book"></option>
+        <option value="Novel"></option>
+      </datalist>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Catalog page -->
+    <section id="catalogPage" class="page active">
+      <div id="catalogGrid" class="grid"></div>
+    </section>
+
+    <!-- Item detail page -->
+    <section id="detailPage" class="page">
+      <div class="page-header">
+        <button class="btn" id="detailBack">← Back</button>
+        <div class="spacer"></div>
+        <button class="btn" id="detailEdit">Edit</button>
+        <button class="btn danger" id="detailDelete">Delete</button>
+
+      </div>
+      <div id="detailBody"></div>
+    </section>
+
+    <!-- Add/Edit page -->
+    <section id="editPage" class="page">
+      <div class="page-header">
+        <button class="btn" id="editBack">← Back</button>
+        <div class="spacer"></div>
+        <button class="btn primary" id="editSave" type="submit">Save</button>
+        <button class="btn danger" id="editDelete" style="display:none;">Delete</button>
+      </div>
+
+      <form id="editForm" class="form">
+        <h2>Edit item</h2>
+
+        <div class="row"><label>Title</label><input id="fTitle" type="text" required /></div>
+        <div class="row"><label>Year</label><input id="fYear" type="number" min="0" /></div>
+        <div class="row"><label>Genre</label><input id="fGenre" type="text" placeholder="Action" /></div>
+
+        <div class="row"><label>Type</label><input id="fType" list="typeSuggestions"
+            placeholder="Blu-ray, Book, Novel…" /></div>
+        <div class="row"><label>Format</label><input id="fFormat" type="text" placeholder="Blu-ray, DVD, 4K UHD" />
+        </div>
+        <div class="row"><label>Region</label><input id="fRegion" type="text" placeholder="A / B / C" /></div>
+        <div class="row"><label>Runtime</label><input id="fRuntime" type="text" placeholder="152 min" /></div>
+        <div class="row"><label>Audio</label><input id="fAudio" type="text" placeholder="DTS-HD MA" /></div>
+        <div class="row"><label>HDR</label><input id="fHdr" type="text" placeholder="HDR10, Dolby Vision, HDR10+" />
+        </div>
+        <div class="row"><label>Languages</label><input id="fLanguages" type="text" placeholder="English" /></div>
+        <div class="row"><label>Subtitles</label><input id="fSubtitles" type="text" placeholder="English" /></div>
+        <div class="row"><label>Edition</label><input id="fEdition" type="text" placeholder="Standard" /></div>
+        <div class="row"><label>Discs</label><input id="fDiscs" type="number" min="0" placeholder="1" /></div>
+        <div class="row"><label>Barcode</label><input id="fBarcode" type="text" /></div>
+        <div class="row"><label>Packaging</label><input id="fPackaging" type="text" placeholder="Slipcover" /></div>
+        <div class="row"><label>Poster URL</label><input id="fPoster" type="url" placeholder="https://…" /></div>
+        <div class="row"><label>Notes</label><textarea id="fNotes" rows="3" placeholder="Any notes…"></textarea></div>
+
+        <div class="section">
+          <h3>Custom fields</h3>
+          <div id="customFieldsList"></div>
+          <div class="row-inline">
+            <input id="customKey" type="text" placeholder="Field name" />
+            <input id="customValue" type="text" placeholder="Value" />
+            <button type="button" class="btn" id="addCustomField">＋ Add custom field</button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- Lists page -->
+    <section id="listsPage" class="page">
+      <div class="page-header">
+        <button class="btn" id="listsBack">← Back</button>
+        <div class="spacer"></div>
+        <button class="btn" id="createList">Create list</button>
+      </div>
+      <div id="listsContainer" class="list-grid"></div>
+    </section>
+
+    <!-- List detail page -->
+    <section id="listDetailPage" class="page">
+      <div class="page-header">
+        <button class="btn" id="listDetailBack">← Back</button>
+        <div class="spacer"></div>
+        <button class="btn" id="listRename">Rename</button>
+        <button class="btn danger" id="listDelete">Delete</button>
+      </div>
+      <h2 id="listTitle"></h2>
+      <p id="listMeta" class="muted"></p>
+
+      <div class="section">
+        <h3>Items in this list</h3>
+        <div id="listItems" class="grid"></div>
+      </div>
+
+      <div class="section">
+        <h3>Add items to this list</h3>
+        <div id="listAddPicker" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- Stats page -->
+    <section id="statsPage" class="page">
+      <h2>Collections by Type</h2>
+      <div id="statsGrid" class="list-grid"></div>
+      <div class="section">
+  <input type="file" id="csvFileInput" accept=".csv" />
+  <button class="btn" id="importCsvBtn">Import CSV</button>
+</div>
+    </section>
+  </main>
+
+<div id="popup" class="popup hidden">
+  <div class="popup-content">
+    <p id="popupMessage"></p>
+    <button class="btn" id="popupOk">OK</button>
+  </div>
+</div>
+
+  <script type="module" src="assets/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('assets/service-worker.js');
+    }
+  </script>
+</body>
+
+</html>
