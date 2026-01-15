@@ -382,6 +382,83 @@ header.nav .actions {
   gap: 8px;
 }
 
+/* Selection overlay */
+.card {
+  position: relative;
+}
+.card.selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 150, 255, 0.25);
+  border: 2px solid #0096ff;
+  pointer-events: none;
+}
+.card .selector-dot {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0,0,0,0.4);
+}
+.card.selected .selector-dot {
+  background: #0096ff;
+  border-color: #fff;
+}
+
+/* Selection toolbar */
+#selectionToolbar {
+  display: none;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #222;
+  background: #111;
+}
+#selectionToolbar.visible {
+  display: flex;
+}
+#selectionCount {
+  margin-right: auto;
+  color: #ccc;
+}
+
+/* Poster Grid */
+.poster-tile {
+  position: relative;
+  display: inline-block;
+  margin: 2px;
+  width: 150px;
+  cursor: pointer;
+  vertical-align: top;
+}
+
+.poster-tile img.poster {
+  width: 100%;
+  border-radius: 4px;
+  display: block;
+}
+
+.poster-tile .card-meta {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.poster-tile .card-meta .title {
+  color: #fff;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.poster-tile .card-meta .meta-line {
+  color: #aaa;
+  font-size: 11px;
+}
+
 /* Media queries for small screens */
 @media (max-width: 600px) {
   body {
@@ -422,3 +499,4 @@ header.nav .actions {
     grid-template-columns: 1fr; /* single column on narrow screens */
   }
 }
+

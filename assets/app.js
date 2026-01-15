@@ -74,9 +74,9 @@ const els = {
   popupMessage: document.getElementById('popupMessage'),
   popupOk: document.getElementById('popupOk'),
 
-  
-  
-    // Delete selected button
+
+
+  // Delete selected button
   deleteSelectedBtn: document.getElementById('deleteSelectedBtn'),
 
   // CSV import controls
@@ -90,6 +90,11 @@ const state = {
   filter: { q: '', type: '' },
   currentItemId: null,
   currentListId: null,
+
+  // Additions for selection mode
+  selectionMode: false,
+  selectedIds: new Set(),
+  lastClickedId: null
 };
 
 /* ------------------------- History tracking --------------------- */
@@ -106,7 +111,7 @@ function goBack() {
 
 /* ------------------------- Popup helpers ------------------------ */
 
-function inputPopup(message, onYes, onNo = () => {}) {
+function inputPopup(message, onYes, onNo = () => { }) {
   const content = els.popup.querySelector('.popup-content');
   if (!content) return;
 
@@ -155,7 +160,7 @@ els.popupOk?.addEventListener('click', () => els.popup.classList.add('hidden'));
  * Confirm popup with Yes/No buttons rendered dynamically.
  * Does not require HTML changes—buttons are injected per call.
  */
-function confirmPopup(message, onYes, onNo = () => {}) {
+function confirmPopup(message, onYes, onNo = () => { }) {
   const content = els.popup.querySelector('.popup-content');
   if (!content) return;
 
@@ -291,7 +296,7 @@ function parseCsv(text) {
   });
 }
 
-  
+
 async function mapCsvRow(row) {
   const title = row['Title'] || '';
   const year = row['Release date'] ? new Date(row['Release date']).getFullYear() : null;
@@ -328,7 +333,7 @@ async function mapCsvRow(row) {
 async function importCsvFile(file) {
   const text = await file.text();
   const rows = parseCsv(text);
-   // 🔍 Quick debug log — paste here
+  // 🔍 Quick debug log — paste here
   console.log("Headers parsed:", Object.keys(rows[0] || {}));
   console.log("First row object:", rows[0]);
 
@@ -348,49 +353,175 @@ function openCatalogPage() {
 }
 
 function renderCatalog() {
-  const q = state.filter.q.toLowerCase();
-  const type = (state.filter.type || '').toLowerCase();
-  const filtered = state.items.filter(i =>
-    (!q || (i.title || '').toLowerCase().includes(q)) &&
-    (!type || (i.type || '').toLowerCase().includes(type))
-  );
-  els.catalogGrid.innerHTML = filtered.map(item => `
-    <div class="card" data-id="${item.id}">
-      ${item.poster ? `<img src="${item.poster}" alt="${item.title}" />` : ''}
-      <div class="pad">
-        <strong>${item.title || '(Untitled)'} <span class="muted">${item.year || ''}</span></strong>
-        <div class="muted">${item.type || item.format || ''}</div>
-        <div class="muted">${[item.region, item.audio].filter(Boolean).join(' • ')}</div>
-        <div class="muted">${item.runtime || ''}${item.genre ? ' • ' + item.genre : ''}</div>
-      </div>
-    </div>
-  `).join('');
-  Array.from(els.catalogGrid.querySelectorAll('.card')).forEach(card => {
-    card.addEventListener('click', () => {
-      location.hash = `#/item/${card.dataset.id}`;
-    });
-  });
-
   const grid = document.getElementById('catalogGrid');
   grid.innerHTML = '';
-  state.items.forEach(item => {
+
+  // Apply search & filter before rendering
+  let filtered = state.items.filter(item => {
+    const matchesSearch = state.filter.q === '' || item.title.toLowerCase().includes(state.filter.q.toLowerCase());
+    const matchesType = state.filter.type === '' || item.type === state.filter.type;
+    return matchesSearch && matchesType;
+  });
+
+  filtered.forEach(item => {
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = 'card poster-tile';
+    card.dataset.id = item.id;
+
+    if (state.selectionMode && state.selectedIds.has(item.id)) {
+      card.classList.add('selected');
+    }
 
     card.innerHTML = `
-      <input type="checkbox" class="item-select" data-id="${item.id}" />
-      <img src="${item.poster || 'assets/placeholder.png'}" alt="${item.title}" />
-      <div class="card-body">
-        <h3>${item.title || 'Untitled'}</h3>
-        <p>${item.year || ''}</p>
-      </div>
-      <button class="btn delete-one" data-id="${item.id}">Delete</button>
-    `;
+  <img class="poster" src="${item.poster || 'assets/icons/placeholder.png'}" alt="${item.title || 'Untitled'}" />
+  <div class="card-meta">
+    <span class="title">${item.title || 'Untitled'}</span>
+    <span class="meta-line">${item.year || ''}${item.year && item.type ? ' • ' : ''}${item.type || ''}</span>
+  </div>
+  ${state.selectionMode ? `<div class="selector-dot"></div>` : ''}
+`;
+
+    attachSelectionHandlers(card, item.id);
+
+    // Normal click → open detail page if not in selection mode
+    card.addEventListener('click', (e) => {
+      if (!state.selectionMode && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        openDetailPage(item.id);
+      }
+    });
 
     grid.appendChild(card);
   });
 
+  updateSelectionToolbar();
 }
+
+/* ------------------------- Selection Handlers ------------------------------- */
+function attachSelectionHandlers(card, id) {
+  // Long press / click-and-hold
+  let pressTimer = null;
+  const LONG_PRESS_MS = 500;
+
+  const startPress = () => {
+    if (state.selectionMode) return;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      enterSelectionMode(id);
+    }, LONG_PRESS_MS);
+  };
+  const cancelPress = () => clearTimeout(pressTimer);
+
+  card.addEventListener('mousedown', startPress);
+  card.addEventListener('touchstart', startPress, { passive: true });
+  card.addEventListener('mouseup', cancelPress);
+  card.addEventListener('mouseleave', cancelPress);
+  card.addEventListener('touchend', cancelPress);
+
+  // Click toggles selection in selection mode
+  card.addEventListener('click', (e) => {
+    if (state.selectionMode) {
+      if (e.shiftKey && state.lastClickedId != null) {
+        selectRange(state.lastClickedId, id);
+      } else {
+        toggleSelection(id);
+      }
+      state.lastClickedId = id;
+      renderCatalog();
+      return;
+    }
+    if (e.shiftKey) {
+      enterSelectionMode(id);
+    }
+  });
+
+  // Right-click enters selection mode
+  card.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (!state.selectionMode) {
+      enterSelectionMode(id);
+    } else {
+      toggleSelection(id);
+      renderCatalog();
+    }
+  });
+}
+
+/* ------------------------- Selection Helpers ------------------------------- */
+function enterSelectionMode(initialId) {
+  state.selectionMode = true;
+  state.selectedIds.clear();
+  state.selectedIds.add(initialId);
+  state.lastClickedId = initialId;
+  updateSelectionToolbar(true);
+  renderCatalog();
+}
+
+function exitSelectionMode() {
+  state.selectionMode = false;
+  state.selectedIds.clear();
+  state.lastClickedId = null;
+  updateSelectionToolbar(false);
+  renderCatalog();
+}
+
+function toggleSelection(id) {
+  if (state.selectedIds.has(id)) {
+    state.selectedIds.delete(id);
+  } else {
+    state.selectedIds.add(id);
+  }
+  updateSelectionToolbar(true);
+}
+
+function selectAll() {
+  state.selectedIds = new Set(state.items.map(i => i.id));
+  updateSelectionToolbar(true);
+}
+
+function selectRange(fromId, toId) {
+  const ids = state.items.map(i => i.id);
+  const a = ids.indexOf(fromId);
+  const b = ids.indexOf(toId);
+  if (a === -1 || b === -1) return;
+  const [start, end] = a < b ? [a, b] : [b, a];
+  for (let i = start; i <= end; i++) {
+    state.selectedIds.add(ids[i]);
+  }
+  updateSelectionToolbar(true);
+}
+
+function updateSelectionToolbar(forceVisible = null) {
+  const bar = document.getElementById('selectionToolbar');
+  const count = document.getElementById('selectionCount');
+  count.textContent = `${state.selectedIds.size} selected`;
+
+  const shouldShow = forceVisible === true
+    || (forceVisible === null && state.selectionMode);
+
+  bar.classList.toggle('hidden', !shouldShow);
+  bar.classList.toggle('visible', shouldShow);
+}
+
+// Toolbar
+  function bindSelectionToolbar() {
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+      selectAll();
+      renderCatalog();
+    });
+
+    document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+      for (const id of state.selectedIds) {
+        await del('items', id);
+      }
+      state.items = await getAll('items');
+      exitSelectionMode();
+      showPopup('Selected items deleted');
+    });
+
+    document.getElementById('cancelSelectionBtn').addEventListener('click', () => {
+      exitSelectionMode();
+    });
+  }
 
 /* ------------------------- Detail ------------------------------- */
 function openDetailPage(id) {
@@ -438,18 +569,18 @@ function openDetailPage(id) {
     if (!val) return;
     let list;
     if (val === '__new') {
-  inputPopup('Enter new list name:', async (name) => {
-    const id = await put('lists', { name, itemIds: [] });
-    state.lists = await getAll('lists');
-    const list = state.lists.find(l => l.id === id);
-    list.itemIds = Array.from(new Set([...(list.itemIds || []), state.currentItemId]));
-    await put('lists', list);
-    state.lists = await getAll('lists');
-    populateListPicker();
-    showPopup('Added to new list');
-  });
-  return; // stop here, handled by popup
-} else {
+      inputPopup('Enter new list name:', async (name) => {
+        const id = await put('lists', { name, itemIds: [] });
+        state.lists = await getAll('lists');
+        const list = state.lists.find(l => l.id === id);
+        list.itemIds = Array.from(new Set([...(list.itemIds || []), state.currentItemId]));
+        await put('lists', list);
+        state.lists = await getAll('lists');
+        populateListPicker();
+        showPopup('Added to new list');
+      });
+      return; // stop here, handled by popup
+    } else {
       list = state.lists.find(l => l.id === Number(val));
     }
     list.itemIds = Array.from(new Set([...(list.itemIds || []), state.currentItemId]));
@@ -653,9 +784,9 @@ function renderLists() {
       <p class="muted">${(l.itemIds || []).length} items</p>
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
         ${(l.itemIds || []).slice(0, 6).map((id) => {
-          const it = state.items.find((x) => x.id === id);
-          return it ? `<img src="${it.poster || ''}" alt="" class="poster-mini" />` : '';
-        }).join('')}
+    const it = state.items.find((x) => x.id === id);
+    return it ? `<img src="${it.poster || ''}" alt="" class="poster-mini" />` : '';
+  }).join('')}
       </div>
     </div>
   `).join('');
@@ -816,7 +947,7 @@ function bindEvents() {
   els.listRename?.addEventListener('click', renameList);
   els.listDelete?.addEventListener('click', deleteList);
 
-// CSV Import
+  // CSV Import
   if (els.importCsvBtn && els.csvFileInput) {
     els.importCsvBtn.addEventListener('click', async () => {
       if (!els.csvFileInput.files.length) {
@@ -824,35 +955,6 @@ function bindEvents() {
         return;
       }
       await importCsvFile(els.csvFileInput.files[0]);
-    });
-  }
-
-    // Delete one item directly
-  document.addEventListener('click', async (e) => {
-    if (e.target.classList.contains('delete-one')) {
-      const id = Number(e.target.dataset.id);
-      await del('items', id);
-      state.items = await getAll('items');
-      renderCatalog();
-      showPopup('Item deleted');
-    }
-  });
-
-  // Delete selected items
-  if (els.deleteSelectedBtn) {
-    els.deleteSelectedBtn.addEventListener('click', async () => {
-      const selected = Array.from(document.querySelectorAll('.item-select:checked'))
-        .map(cb => Number(cb.dataset.id));
-      if (!selected.length) {
-        showPopup('No items selected');
-        return;
-      }
-      for (const id of selected) {
-        await del('items', id);
-      }
-      state.items = await getAll('items');
-      renderCatalog();
-      showPopup(`${selected.length} items deleted`);
     });
   }
 
@@ -866,5 +968,6 @@ function bindEvents() {
 (async function init() {
   await loadData();
   bindEvents();
+  bindSelectionToolbar();
   route();
 })();

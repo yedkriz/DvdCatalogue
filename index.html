@@ -35,7 +35,18 @@
 
   <main>
 
+    <!-- Selection menu -->
+    <section>
+      <div id="selectionToolbar" class="hidden">
+        <span id="selectionCount">0 selected</span>
+        <button id="selectAllBtn">Select All</button>
+        <button id="deleteSelectedBtn" class="danger">Delete</button>
+        <button id="cancelSelectionBtn">Cancel</button>
+      </div><br>
+    </section>
+    
     <!-- Catalog page -->
+
     <section id="catalogPage" class="page active">
       <div id="catalogGrid" class="grid"></div>
     </section>
@@ -135,18 +146,18 @@
       <h2>Collections by Type</h2>
       <div id="statsGrid" class="list-grid"></div>
       <div class="section">
-  <input type="file" id="csvFileInput" accept=".csv" />
-  <button class="btn" id="importCsvBtn">Import CSV</button>
-</div>
+        <input type="file" id="csvFileInput" accept=".csv" />
+        <button class="btn" id="importCsvBtn">Import CSV</button>
+      </div>
     </section>
   </main>
 
-<div id="popup" class="popup hidden">
-  <div class="popup-content">
-    <p id="popupMessage"></p>
-    <button class="btn" id="popupOk">OK</button>
+  <div id="popup" class="popup hidden">
+    <div class="popup-content">
+      <p id="popupMessage"></p>
+      <button class="btn" id="popupOk">OK</button>
+    </div>
   </div>
-</div>
 
   <script type="module" src="assets/app.js"></script>
   <script>
