@@ -496,7 +496,7 @@ header.nav .actions {
   }
 
   .grid, .list-grid {
-    grid-template-columns: 1fr; /* single column on narrow screens */
+    grid-template-columns: auto auto; /* single column on narrow screens */
   }
 }
 
