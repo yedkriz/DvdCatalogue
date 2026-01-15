@@ -305,8 +305,8 @@ async function mapCsvRow(row) {
   return {
     title,
     year,
-    format: 'Blu-ray',
-    type: 'Blu-ray',
+    format: row['Format'] || '',
+    type: row['Type'] || '',
     region: row['Country code'] || '',
     barcode: row['UPC'] || row['EAN'] || '',
     notes: row['Comment'] || '',
@@ -400,7 +400,7 @@ function renderCatalog() {
 function attachSelectionHandlers(card, id) {
   // Long press / click-and-hold
   let pressTimer = null;
-  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MS = 1600;
 
   const startPress = () => {
     if (state.selectionMode) return;
