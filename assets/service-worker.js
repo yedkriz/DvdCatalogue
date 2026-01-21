@@ -1,18 +1,34 @@
 const CACHE_NAME = 'catalog-cache-v1';
 const ASSETS = [
-  './',
-  './index.html',
-  './assets/styles.css',
-  './assets/app.js',
-  './assets/idb.js',
-  './assets/manifest.json',
-  './assets/icons/icon-192.png',
-  './assets/icons/icon-512.png',
-  './assets/icons/placeholder.png'
+  '/',
+  '/index.html',
+  '/assets/styles.css',
+  '/assets/app.js',
+  '/assets/idb.js',
+  '/assets/manifest.json',
+  '/assets/icons/icon-192.png',
+  '/assets/icons/icon-512.png',
+  '/assets/icons/placeholder.png'
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  e.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return Promise.all(
+        ASSETS.map((url) =>
+          fetch(url).then((resp) => {
+            if (resp.ok) {
+              return cache.put(url, resp);
+            } else {
+              console.warn('Skipping asset:', url);
+            }
+          }).catch((err) => {
+            console.warn('Failed to cache:', url, err);
+          })
+        )
+      );
+    })
+  );
   self.skipWaiting();
 });
 

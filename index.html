@@ -15,10 +15,10 @@
   <header class="nav">
     <div class="brand" onclick="location.hash='#/'">Catalog</div>
     <nav class="menu">
-      <a href="#/">Home</a>
+      <a href="#/" id="homeBtn">Home</a>
       <a href="#/lists">Lists</a>
       <a href="#/new">Add item</a>
-      <a href="#/stats">Stats</a>
+      <a href="#/stats" id="statsBtn">Stats</a>
     </nav>
     <div class="actions">
       <input id="searchInput" type="search" placeholder="Search…" />
@@ -37,18 +37,22 @@
 
     <!-- Selection menu -->
     <section>
-      <div id="selectionToolbar" class="hidden" style="position: sticky; top: 0px;">
+      <div id="selectionToolbar" class="hidden">
         <span id="selectionCount">0 selected</span>
         <button id="selectAllBtn">Select All</button>
         <button id="deleteSelectedBtn" class="danger">Delete</button>
         <button id="cancelSelectionBtn">Cancel</button>
       </div><br>
     </section>
-    
+
     <!-- Catalog page -->
 
     <section id="catalogPage" class="page active">
-      <div id="catalogGrid" class="grid"></div>
+      <div class="back-bar">
+        <button class="btn" id="backToStatsBtn" style="display:none">← Back to Stats</button>
+      </div>
+      <div id="catalogGrid" class="grid">
+      </div>
     </section>
 
     <!-- Item detail page -->
@@ -143,7 +147,8 @@
 
     <!-- Stats page -->
     <section id="statsPage" class="page">
-      <h2>Collections by Type</h2>
+      <button class="btn" id="statsBack">← Back</button>
+      <h2>Current Collections</h2>
       <div id="statsGrid" class="list-grid"></div>
       <div class="section">
         <input type="file" id="csvFileInput" accept=".csv" />

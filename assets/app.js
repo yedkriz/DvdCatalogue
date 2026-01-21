@@ -17,13 +17,20 @@ const els = {
   // catalog
   catalogGrid: document.getElementById('catalogGrid'),
 
+  // nav buttons (add these!)
+  homeBtn: document.getElementById('homeBtn'),
+  listsBtn: document.getElementById('listsBtn'),
+  addBtn: document.getElementById('addBtn'),
+  statsBtn: document.getElementById('statsBtn'),
+  importCsvBtn: document.getElementById('importCsvBtn'),
+
   // detail
   detailBack: document.getElementById('detailBack'),
   detailEdit: document.getElementById('detailEdit'),
   detailDelete: document.getElementById('detailDelete'),
   detailBody: document.getElementById('detailBody'),
-  detailListPicker: null,       // created dynamically
-  detailAddToList: null,        // created dynamically
+  detailListPicker: null,
+  detailAddToList: null,
 
   // edit
   editBack: document.getElementById('editBack'),
@@ -74,14 +81,11 @@ const els = {
   popupMessage: document.getElementById('popupMessage'),
   popupOk: document.getElementById('popupOk'),
 
-
-
   // Delete selected button
   deleteSelectedBtn: document.getElementById('deleteSelectedBtn'),
 
   // CSV import controls
-  csvFileInput: document.getElementById('csvFileInput'),
-  importCsvBtn: document.getElementById('importCsvBtn')
+  csvFileInput: document.getElementById('csvFileInput')
 };
 
 const state = {
@@ -96,18 +100,6 @@ const state = {
   selectedIds: new Set(),
   lastClickedId: null
 };
-
-/* ------------------------- History tracking --------------------- */
-const routeHistory = [];
-function goBack() {
-  routeHistory.pop(); // current
-  const prev = routeHistory.pop(); // previous
-  if (prev) {
-    location.hash = prev;
-  } else {
-    location.hash = '#/';
-  }
-}
 
 /* ------------------------- Popup helpers ------------------------ */
 
@@ -203,32 +195,78 @@ function showPage(id) {
   document.getElementById(id)?.classList.add('active');
 }
 
+/* ------------------------- Back button logic --------------------- */
+function goBack() {
+  const current = location.hash;
+
+  if (current.startsWith('#/edit/')) {
+    const id = current.split('/')[2];
+    location.hash = `#/item/${id}`;
+  } else if (current.startsWith('#/item/')) {
+    location.hash = '#/home';
+  } else if (current.startsWith('#/lists/')) {
+    location.hash = '#/lists';
+  } else if (current.startsWith('#/lists')) {
+    location.hash = '#/home';
+  } else if (current.startsWith('#/add')) {
+    location.hash = '#/home';
+  } else if (current.startsWith('#/stats/')) {
+    // ✅ From filtered stats → go back to stats overview
+    location.hash = '#/stats';
+  } else if (current.startsWith('#/stats')) {
+    // ✅ From stats overview → go back to home (Filter Reset)
+    state.filter.q = '';
+    state.filter.type = '';
+    location.hash = '#/home';
+  } else {
+    location.hash = '#/home';
+  }
+}
+
 /* ------------------------- Routing ------------------------------ */
 function route() {
-  const hash = location.hash || '#/';
-  routeHistory.push(hash);
+  let hash = location.hash;
+
+  // Normalize root or empty hash to home
+  if (!hash || hash === '#' || hash === '#/') {
+    hash = '#/home';
+    location.hash = hash;
+  }
 
   if (hash.startsWith('#/item/')) {
     const id = Number(hash.split('/')[2]);
+    state.currentItemId = id; // track current item
     openDetailPage(id);
   } else if (hash.startsWith('#/edit/')) {
     const id = Number(hash.split('/')[2]);
+    state.currentItemId = id; // track current item
     openEditPage(id);
   } else if (hash.startsWith('#/new')) {
+    state.currentItemId = null;
     openEditPage(null);
   } else if (hash.startsWith('#/lists/')) {
     const id = Number(hash.split('/')[2]);
+    state.currentListId = id;
     openListDetailPage(id);
   } else if (hash.startsWith('#/lists')) {
     openListsPage();
+  } else if (hash.startsWith('#/stats/')) {
+    const type = decodeURIComponent(hash.split('/')[2]);   // whatever user assigned or unknown
+    openStatsPage(type);               // show stats filtered by that type
   } else if (hash.startsWith('#/stats')) {
-    openStatsPage();
+    openStatsPage();                   // stats overview
+  } else if (hash.startsWith('#/add')) {
+    openAddItemPage();
+  } else if (hash.startsWith('#/home')) {
+    openCatalogPage();
   } else {
     openCatalogPage();
   }
 }
 
+
 /* ------------------------- Data load ---------------------------- */
+
 async function loadData() {
   state.items = await getAll('items');
   state.lists = await getAll('lists');
@@ -305,8 +343,8 @@ async function mapCsvRow(row) {
   return {
     title,
     year,
-    format: row['Format'] || '',
-    type: row['Type'] || '',
+    format: normalizeType(row['Format']),
+    type: normalizeType(row['Type']),
     region: row['Country code'] || '',
     barcode: row['UPC'] || row['EAN'] || '',
     notes: row['Comment'] || '',
@@ -330,6 +368,19 @@ async function mapCsvRow(row) {
   };
 }
 
+function normalizeType(raw) {
+  if (!raw) return '';
+  const t = raw.trim().toLowerCase();
+
+  if (t === 'dvd') return 'DVD';
+  if (t === 'blu-ray' || t === 'bluray' || t === 'blu ray') return 'Blu-ray';
+  if (t === 'uhd' || t === '4k') return 'UHD';
+  if (t === 'digital') return 'Digital';
+
+  // Default: capitalize first letter
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 async function importCsvFile(file) {
   const text = await file.text();
   const rows = parseCsv(text);
@@ -350,16 +401,64 @@ async function importCsvFile(file) {
 function openCatalogPage() {
   showPage('catalogPage');
   renderCatalog();
+    // Always hide the stats back button on home
+  const backBtn = document.getElementById('backToStatsBtn');
+  if (backBtn) backBtn.style.display = 'none';
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.currentItemId) {
+    showPage('catalogPage'); // or whatever your catalog view is called
+    state.currentItemId = null;
+  }
+});
 
 function renderCatalog() {
   const grid = document.getElementById('catalogGrid');
   grid.innerHTML = '';
 
+  const isUnknownFilter = state.filter.type === 'Unknown';
+
   // Apply search & filter before rendering
-  let filtered = state.items.filter(item => {
-    const matchesSearch = state.filter.q === '' || item.title.toLowerCase().includes(state.filter.q.toLowerCase());
-    const matchesType = state.filter.type === '' || item.type === state.filter.type;
+  const filtered = state.items.filter(item => {
+    const q = (state.filter.q || '').toLowerCase();
+
+    const customSearch = item.custom
+      ? Object.values(item.custom).join(' ').toLowerCase()
+      : '';
+
+    const searchable = [
+      item.title,
+      item.year,
+      item.type,
+      item.format,
+      item.region,
+      item.audio,
+      item.hdr,
+      item.edition,
+      item.discs,
+      item.runtime,
+      item.genre,
+      item.languages,
+      item.subtitles,
+      item.notes,
+      item.barcode,
+      item.packaging,
+      customSearch
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    const matchesSearch = !q || searchable.includes(q);
+
+    // Unknown = items with no type AND no format (trimmed)
+    const isUnknownItem =
+      (!item.type || !item.type.trim()) &&
+      (!item.format || !item.format.trim());
+
+    const matchesType =
+      state.filter.type === '' ||
+      (!isUnknownFilter && item.type === state.filter.type) ||
+      (isUnknownFilter && isUnknownItem);
+
     return matchesSearch && matchesType;
   });
 
@@ -372,21 +471,27 @@ function renderCatalog() {
       card.classList.add('selected');
     }
 
+    // Compute display values once—this fixes the missing bullet
+    const displayTitle = item.title || 'Untitled';
+    const displayPoster = item.poster || 'assets/icons/placeholder.png';
+    const displayType = item.type || item.format || 'Unknown';
+    const displayYear = item.year || '';
+    const showBullet = displayYear && displayType ? ' • ' : '';
+
     card.innerHTML = `
-  <img class="poster" src="${item.poster || 'assets/icons/placeholder.png'}" alt="${item.title || 'Untitled'}" />
-  <div class="card-meta">
-    <span class="title">${item.title || 'Untitled'}</span>
-    <span class="meta-line">${item.year || ''}${item.year && item.type ? ' • ' : ''}${item.type || ''}</span>
-  </div>
-  ${state.selectionMode ? `<div class="selector-dot"></div>` : ''}
-`;
+      <img class="poster" src="${displayPoster}" alt="${displayTitle}" />
+      <div class="card-meta">
+        <span class="title">${displayTitle}</span>
+        <span class="meta-line">${displayYear}${showBullet}${displayType}</span>
+      </div>
+      ${state.selectionMode ? `<div class="selector-dot"></div>` : ''}
+    `;
 
     attachSelectionHandlers(card, item.id);
 
-    // Normal click → open detail page if not in selection mode
     card.addEventListener('click', (e) => {
       if (!state.selectionMode && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        openDetailPage(item.id);
+        location.hash = `#/item/${item.id}`;
       }
     });
 
@@ -396,7 +501,9 @@ function renderCatalog() {
   updateSelectionToolbar();
 }
 
+
 /* ------------------------- Selection Handlers ------------------------------- */
+
 function attachSelectionHandlers(card, id) {
   // Long press / click-and-hold
   let pressTimer = null;
@@ -447,6 +554,7 @@ function attachSelectionHandlers(card, id) {
 }
 
 /* ------------------------- Selection Helpers ------------------------------- */
+
 function enterSelectionMode(initialId) {
   state.selectionMode = true;
   state.selectedIds.clear();
@@ -502,31 +610,100 @@ function updateSelectionToolbar(forceVisible = null) {
   bar.classList.toggle('visible', shouldShow);
 }
 
-// Toolbar
-  function bindSelectionToolbar() {
-    document.getElementById('selectAllBtn').addEventListener('click', () => {
-      selectAll();
-      renderCatalog();
-    });
+// Status Page click helper
+function onStatsCardClick(type) {
+  state.filter.type = type;
+  location.hash = `#/stats/${encodeURIComponent(type)}`;
 
-    document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
-      for (const id of state.selectedIds) {
-        await del('items', id);
-      }
-      state.items = await getAll('items');
-      exitSelectionMode();
-      showPopup('Selected items deleted');
-    });
+  // Clear and add back button container
+  const grid = document.getElementById('catalogGrid');
+  grid.innerHTML = `
+    <div class="back-bar">
+      <button id="backToStatsBtn">← Back to Stats</button>
+    </div>
+  `;
 
-    document.getElementById('cancelSelectionBtn').addEventListener('click', () => {
-      exitSelectionMode();
+  // Append catalog items after the back bar
+  renderCatalog();
+
+  // Bind back button safely
+  const backBtn = document.getElementById('backToStatsBtn');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      showPage('statsPage');
     });
   }
+}
+
+// Render Stats Grid 
+function renderStatsGrid() {
+  const grid = document.getElementById('statsGrid');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  const counts = {};
+  state.items.forEach(i => {
+    const t = i.type?.trim() || i.format?.trim() || 'Unknown';
+    counts[t] = (counts[t] || 0) + 1;
+  });
+
+  Object.entries(counts).forEach(([type, count]) => {
+    const card = document.createElement('div');
+    card.className = 'list-card';
+    card.dataset.type = type;
+    card.innerHTML = `
+      <h3>${type}</h3>
+      <p class="muted">${count} items</p>
+    `;
+
+    card.addEventListener('click', () => {
+      if (type === 'Unknown') {
+        // filter items with no type/format
+        state.filter.type = '';
+        state.filter.format = '';
+      } else {
+        state.filter.type = type;
+      }
+      location.hash = `#/stats/${encodeURIComponent(type)}`;
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+// Toolbar
+function bindSelectionToolbar() {
+  document.getElementById('selectAllBtn').addEventListener('click', () => {
+    selectAll();
+    renderCatalog();
+  });
+
+  document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+    for (const id of state.selectedIds) {
+      await del('items', id);
+    }
+    state.items = await getAll('items');
+    exitSelectionMode();
+    showPopup('Selected items deleted');
+  });
+
+  document.getElementById('cancelSelectionBtn').addEventListener('click', () => {
+    exitSelectionMode();
+  });
+
+  // 🔽 ESC key exits selection mode
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.selectionMode) {
+      exitSelectionMode();
+    }
+  });
+}
 
 /* ------------------------- Detail ------------------------------- */
 function openDetailPage(id) {
   const item = state.items.find(i => i.id === id);
-  if (!item) { location.hash = '#/'; return; }
+  if (!item) { location.hash = '#/home'; return; }
   state.currentItemId = id;
   showPage('detailPage');
 
@@ -591,15 +768,59 @@ function openDetailPage(id) {
   });
 }
 
+// Improving Labels
 function renderCustomDetail(custom) {
   const keys = Object.keys(custom || {});
   if (!keys.length) return '';
+
   return `
     <div class="section">
-      <h3>Custom fields</h3>
-      ${keys.map(k => `<div><strong>${k}:</strong> ${custom[k]}</div>`).join('')}
+      ${keys
+      .filter(k => custom[k]) // skip empty values
+      .map(k => `<div><strong>${formatLabel(k)}:</strong> ${custom[k]}</div>`)
+      .join('')}
     </div>
   `;
+}
+
+// Format Label
+const customLabels = {
+  BluRayDiscs: "Blu-ray Discs",
+  DvdDiscs: "DVD Discs",
+  DigitalCopy: "Digital Copy",
+  DateAdded: "Date Added",
+  PriceComment: "Price Comment"
+  // … add others as needed
+};
+
+function formatLabel(key) {
+
+  if (customLabels[key]) return customLabels[key];
+
+  if (!key) return '';
+
+  // Preserve acronyms (all caps)
+  if (/^[A-Z]+$/.test(key)) return key;
+
+  // If the key already contains spaces or hyphens, just title-case words
+  if (/\s|-/.test(key)) {
+    return key
+      .split(/(\s|-)/) // keep spaces and hyphens as separators
+      .map(part => {
+        if (part === ' ' || part === '-') return part; // preserve separators
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join('');
+  }
+
+  // Handle camelCase → add space before capital letters
+  let label = key.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+  // Replace underscores with spaces
+  label = label.replace(/_/g, ' ');
+
+  // Capitalize each word
+  return label.replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function populateListPicker() {
@@ -891,45 +1112,67 @@ async function deleteList() {
 }
 
 /* ------------------------- Stats -------------------------------- */
-function openStatsPage() {
-  showPage('statsPage');
-  const counts = {};
-  state.items.forEach(i => {
-    const t = i.type || i.format || 'Unknown';
-    counts[t] = (counts[t] || 0) + 1;
-  });
-  els.statsGrid.innerHTML = Object.entries(counts).map(([type, count]) =>
-    `<div class="list-card"><h3>${type}</h3><p class="muted">${count} items</p></div>`
-  ).join('');
+
+function openStatsPage(type) {
+  if (type) {
+    state.filter.type = type;          // 'DVD', 'Blu-ray', or 'Unknown'
+    showPage('catalogPage');
+    renderCatalog();
+
+    const backBtn = document.getElementById('backToStatsBtn');
+    if (backBtn) {
+      backBtn.style.display = 'block'; // show only in type view
+      backBtn.onclick = () => { location.hash = '#/stats'; };
+    }
+  } else {
+    showPage('statsPage');
+    renderStatsGrid();
+
+    const statsBackBtn = document.getElementById('statsBack');
+    if (statsBackBtn) statsBackBtn.onclick = goBack;
+
+    const backBtn = document.getElementById('backToStatsBtn');
+    if (backBtn) backBtn.style.display = 'none'; // hide when not in type view
+  }
 }
 
 /* ------------------------- Events -------------------------------- */
 function bindEvents() {
   window.addEventListener('hashchange', route);
 
-  if (els.searchInput) {
-    els.searchInput.addEventListener('input', (e) => {
-      state.filter.q = e.target.value.trim().toLowerCase();
-      renderCatalog();
-    });
-  }
-  if (els.typeFilter) {
-    els.typeFilter.addEventListener('input', (e) => {
-      state.filter.type = e.target.value.trim();
-      renderCatalog();
-    });
-  }
+  // Search filters
+  els.searchInput?.addEventListener('input', (e) => {
+    state.filter.q = e.target.value.trim().toLowerCase();
+    renderCatalog();
+  });
+  els.typeFilter?.addEventListener('input', (e) => {
+    state.filter.type = e.target.value.trim();
+    renderCatalog();
+  });
+
+  // Catalog click 
+  els.catalogGrid?.addEventListener('click', (e) => {
+    const card = e.target.closest('.catalog-card');
+    if (!card) return;
+
+    const id = card.dataset.id;
+    if (!id) return;
+
+    // Always navigate via hash so router handles it
+    location.hash = `#/item/${id}`;
+  });
 
   // Detail header buttons
   els.detailBack?.addEventListener('click', goBack);
-  els.detailEdit?.addEventListener('click', () => openEditPage(state.currentItemId));
+  els.detailEdit?.addEventListener('click', () => {
+    if (state.currentItemId) {
+      location.hash = `#/edit/${state.currentItemId}`;
+    }
+  });
   els.detailDelete?.addEventListener('click', deleteItem);
-  // detailAddToList is bound inside openDetailPage()
 
   // Edit
   els.editBack?.addEventListener('click', goBack);
-
-  // Ensure Save triggers form submit
   els.editSave?.addEventListener('click', (e) => {
     e.preventDefault();
     els.editForm?.requestSubmit();
@@ -948,15 +1191,13 @@ function bindEvents() {
   els.listDelete?.addEventListener('click', deleteList);
 
   // CSV Import
-  if (els.importCsvBtn && els.csvFileInput) {
-    els.importCsvBtn.addEventListener('click', async () => {
-      if (!els.csvFileInput.files.length) {
-        showPopup('Please select a CSV file first');
-        return;
-      }
-      await importCsvFile(els.csvFileInput.files[0]);
-    });
-  }
+  els.importCsvBtn?.addEventListener('click', async () => {
+    if (!els.csvFileInput?.files.length) {
+      showPopup('Please select a CSV file first');
+      return;
+    }
+    await importCsvFile(els.csvFileInput.files[0]);
+  });
 
   // ESC → back
   document.addEventListener('keydown', (e) => {
@@ -969,5 +1210,24 @@ function bindEvents() {
   await loadData();
   bindEvents();
   bindSelectionToolbar();
+
+  // Nav buttons
+  els.homeBtn?.addEventListener('click', () => {
+    state.filter.q = '';
+    state.filter.type = '';
+    location.hash = '#/home';
+  });
+  els.listsBtn?.addEventListener('click', () => location.hash = '#/lists');
+  els.addBtn?.addEventListener('click', () => location.hash = '#/add');
+  els.statsBtn?.addEventListener('click', () => location.hash = '#/stats');
+  els.importCsvBtn?.addEventListener('click', () => location.hash = '#/import');
+
+  // Run router once after init finishes
   route();
 })();
+
+
+// Listen for hash changes
+window.addEventListener('hashchange', route);
+
+

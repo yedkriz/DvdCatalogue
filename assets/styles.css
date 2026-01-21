@@ -459,6 +459,23 @@ header.nav .actions {
   font-size: 11px;
 }
 
+/* Stats Back Btn */
+.back-bar {
+  margin: 8px 0;
+}
+/*
+#backToStatsBtn {
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#backToStatsBtn:hover {
+  background: #444;
+}*/
+
 /* Media queries for small screens */
 @media (max-width: 600px) {
   body {
@@ -499,4 +516,5 @@ header.nav .actions {
     grid-template-columns: auto auto; /* single column on narrow screens */
   }
 }
+
 
