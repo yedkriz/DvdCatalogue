@@ -1,14 +1,14 @@
 const CACHE_NAME = 'catalog-cache-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/assets/styles.css',
-  '/assets/app.js',
-  '/assets/idb.js',
-  '/assets/manifest.json',
-  '/assets/icons/icon-192.png',
-  '/assets/icons/icon-512.png',
-  '/assets/icons/placeholder.png'
+  '/DvdCatalogue/',
+  '/DvdCatalogue/index.html',
+  '/DvdCatalogue/assets/styles.css',
+  '/DvdCatalogue/assets/app.js',
+  '/DvdCatalogue/assets/idb.js',
+  '/DvdCatalogue/assets/manifest.json',
+  '/DvdCatalogue/assets/icons/icon-192.png',
+  '/DvdCatalogue/assets/icons/icon-512.png',
+  '/DvdCatalogue/assets/icons/placeholder.png'
 ];
 
 self.addEventListener('install', (e) => {
@@ -54,4 +54,5 @@ self.addEventListener('fetch', (e) => {
       return cached || fetchPromise;
     })
   );
+
 });
