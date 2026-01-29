@@ -5,10 +5,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Catalog</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="manifest" href="/assets/manifest.json" />
+  <link rel="icon" href="/assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="/assets/styles.css" />
 
-  <link rel="manifest" href="/DvdCatalogue/assets/manifest.json" />
-  <link rel="icon" href="/DvdCatalogue/assets/icons/icon-192.png" />
-  <link rel="stylesheet" href="/DvdCatalogue/assets/styles.css" />
 </head>
 
 <body>
@@ -20,7 +21,8 @@
       <a href="#/new">Add item</a>
       <a href="#/stats" id="statsBtn">Stats</a>
     </nav>
-    <div class="actions">
+    <!-- Search & Filter -->
+    <div id="actions" class="actions">
       <input id="searchInput" type="search" placeholder="Search…" />
       <input id="typeFilter" list="typeSuggestions" placeholder="Filter by type (Blu-ray, Book…)" />
       <datalist id="typeSuggestions">
@@ -38,10 +40,10 @@
     <!-- Selection menu -->
     <section>
       <div id="selectionToolbar" class="hidden">
-        <span id="selectionCount">0 selected</span>
-        <button id="selectAllBtn">Select All</button>
-        <button id="deleteSelectedBtn" class="danger">Delete</button>
-        <button id="cancelSelectionBtn">Cancel</button>
+        <span id="selectionCount">0 Selected</span>
+        <button id="selectAllBtn" class="btn">Select All</button>
+        <button id="deleteSelectedBtn" class="danger btn">Delete</button>
+        <button id="cancelSelectionBtn" class="btn">Cancel</button>
       </div><br>
     </section>
 
@@ -139,22 +141,44 @@
         <div id="listItems" class="grid"></div>
       </div>
 
-      <div class="section">
-        <h3>Add items to this list</h3>
-        <div id="listAddPicker" class="grid"></div>
-      </div>
+      <div class="list-add-header import-ui" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+  <h2>Add items to this list</h2>
+  <div id="actionsListDetail" class="actions">
+    <input id="listSearchInput" type="search" placeholder="Search…" />
+    <input id="listTypeFilter" list="listTypeSuggestions" placeholder="Filter by type" />
+    <datalist id="listTypeSuggestions"></datalist>
+  </div>
+</div>
+
+<div id="listAddPicker" class="grid"></div>
     </section>
 
-    <!-- Stats page -->
-    <section id="statsPage" class="page">
-      <button class="btn" id="statsBack">← Back</button>
-      <h2>Current Collections</h2>
-      <div id="statsGrid" class="list-grid"></div>
-      <div class="section">
-        <input type="file" id="csvFileInput" accept=".csv" />
-        <button class="btn" id="importCsvBtn">Import CSV</button>
-      </div>
-    </section>
+<!-- Stats page -->
+<section id="statsPage" class="page">
+  <button class="btn" id="statsBack">← Back</button>
+  <h2>Current Collections</h2>
+  <div id="statsGrid" class="list-grid"></div>
+
+<div class="section import-ui">
+  <h2 class="toolbar-title">Import & Export</h2>
+
+  <div class="file-toolbar">
+    <label for="csvFileInput" class="file-label">
+      <span class="material-icons">description</span>
+      <span id="fileName">Choose CSV file</span>
+    </label>
+    <input type="file" id="csvFileInput" accept=".csv" hidden />
+
+    <button class="btn primary" id="importCsvBtn">
+      <span class="material-icons">upload</span> Import
+    </button>
+    <button class="btn" id="exportCsvBtn">
+      <span class="material-icons">download</span> Export
+    </button>
+  </div>
+</div>
+
+</section>
   </main>
 
   <div id="popup" class="popup hidden">
@@ -164,10 +188,10 @@
     </div>
   </div>
 
-  <script type="module" src="/DvdCatalogue/assets/app.js"></script>
+  <script type="module" src="/assets/app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/DvdCatalogue/assets/service-worker.js');
+      navigator.serviceWorker.register('/assets/service-worker.js');
     }
   </script>
 </body>

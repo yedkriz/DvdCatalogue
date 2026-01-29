@@ -1,5 +1,14 @@
 import { getAll, get, put, del } from './idb.js';
 
+// Remove before Final 
+(function assertPopup() {
+  const popup = document.getElementById('popup');
+  const content = popup?.querySelector('.popup-content');
+  if (!popup || !content) {
+    console.error('Popup container or .popup-content missing.');
+  }
+})();
+// Remove here
 /* ------------------------- Element refs ------------------------- */
 const els = {
   // pages
@@ -11,8 +20,10 @@ const els = {
   statsPage: document.getElementById('statsPage'),
 
   // global controls
+  actions: document.getElementById('actions'),
   searchInput: document.getElementById('searchInput'),
   typeFilter: document.getElementById('typeFilter'),
+  typeSuggestions: document.getElementById('typeSuggestions'),
 
   // catalog
   catalogGrid: document.getElementById('catalogGrid'),
@@ -22,7 +33,6 @@ const els = {
   listsBtn: document.getElementById('listsBtn'),
   addBtn: document.getElementById('addBtn'),
   statsBtn: document.getElementById('statsBtn'),
-  importCsvBtn: document.getElementById('importCsvBtn'),
 
   // detail
   detailBack: document.getElementById('detailBack'),
@@ -65,13 +75,17 @@ const els = {
   listsContainer: document.getElementById('listsContainer'),
 
   // list detail
+  listSearchInput: document.getElementById('listSearchInput'),
+  listTypeFilter: document.getElementById('listTypeFilter'),
+  listTypeSuggestions: document.getElementById('listTypeSuggestions'),
+  listAddPicker: document.getElementById('listAddPicker'),
   listDetailBack: document.getElementById('listDetailBack'),
   listRename: document.getElementById('listRename'),
   listDelete: document.getElementById('listDelete'),
   listTitle: document.getElementById('listTitle'),
   listMeta: document.getElementById('listMeta'),
   listItems: document.getElementById('listItems'),
-  listAddPicker: document.getElementById('listAddPicker'),
+
 
   // stats
   statsGrid: document.getElementById('statsGrid'),
@@ -85,13 +99,20 @@ const els = {
   deleteSelectedBtn: document.getElementById('deleteSelectedBtn'),
 
   // CSV import controls
-  csvFileInput: document.getElementById('csvFileInput')
+  csvFileInput: document.getElementById('csvFileInput'),
+  importCsvBtn: document.getElementById('importCsvBtn'),
+  fileName: document.getElementById('fileName')
 };
 
 const state = {
   items: [],
   lists: [],
-  filter: { q: '', type: '' },
+  
+  // separate filters
+  catalogFilter: { q: '', type: '' },   // used only in catalog/home
+  listFilter: { q: '', type: '' },      // used only in list detail
+  statsFilter: { q: '', type: '' }, 
+
   currentItemId: null,
   currentListId: null,
 
@@ -103,60 +124,67 @@ const state = {
 
 /* ------------------------- Popup helpers ------------------------ */
 
-function inputPopup(message, onYes, onNo = () => { }) {
-  const content = els.popup.querySelector('.popup-content');
-  if (!content) return;
+function showPopup(msg) {
+  const popup = document.getElementById('popup');
+  const content = popup?.querySelector('.popup-content');
+  if (!popup || !content) return;
+
+  content.innerHTML = `
+    <p id="popupMessage">${msg}</p>
+    <button class="btn" id="popupOk">OK</button>
+  `;
+  popup.classList.remove('hidden');
+  popup.style.opacity = '1';
+  popup.style.pointerEvents = 'auto';
+  popup.style.zIndex = '9999';
+
+  const ok = content.querySelector('#popupOk');
+  ok?.addEventListener('click', () => popup.classList.add('hidden'));
+}
+
+function inputPopup(message, onYes, onNo = null, successMsg = '') {
+  const popup = document.getElementById('popup');
+  const content = popup?.querySelector('.popup-content');
+  if (!popup || !content) return;
 
   content.innerHTML = `
     <p>${message}</p>
     <input type="text" id="popupInput" style="width:100%; margin-top:8px;" />
+    <div id="popupWarning" class="muted" style="color:red; margin-top:4px;"></div>
     <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
       <button class="btn primary" id="popupYes">Yes</button>
       <button class="btn" id="popupNo">No</button>
     </div>
   `;
-  els.popup.classList.remove('hidden');
+  popup.classList.remove('hidden');
 
   const input = content.querySelector('#popupInput');
+  const warning = content.querySelector('#popupWarning');
   const yesBtn = content.querySelector('#popupYes');
   const noBtn = content.querySelector('#popupNo');
 
-  const cleanup = () => {
-    els.popup.classList.add('hidden');
-    content.innerHTML = `
-      <p id="popupMessage"></p>
-      <button class="btn" id="popupOk">OK</button>
-    `;
-    const ok = content.querySelector('#popupOk');
-    ok?.addEventListener('click', () => els.popup.classList.add('hidden'));
-  };
-
   yesBtn.addEventListener('click', async () => {
     const val = input.value.trim();
-    if (val) await onYes(val);
-    cleanup();
+    if (!val) {
+      warning.textContent = 'Please enter a name';
+      return; // ✅ keep popup open
+    }
+    await onYes(val);
+    popup.classList.add('hidden');
+    if (successMsg) showPopup(successMsg.replace('{name}', val));
   });
+
   noBtn.addEventListener('click', () => {
-    onNo();
-    cleanup();
+    popup.classList.add('hidden'); // ✅ just close, no extra popup
+    if (onNo) onNo();
   });
 }
 
-function showPopup(msg) {
-  els.popupMessage.textContent = msg;
-  els.popup.classList.remove('hidden');
-}
-els.popupOk?.addEventListener('click', () => els.popup.classList.add('hidden'));
-
-/**
- * Confirm popup with Yes/No buttons rendered dynamically.
- * Does not require HTML changes—buttons are injected per call.
- */
 function confirmPopup(message, onYes, onNo = () => { }) {
-  const content = els.popup.querySelector('.popup-content');
-  if (!content) return;
+  const popup = document.getElementById('popup');
+  const content = popup?.querySelector('.popup-content');
+  if (!popup || !content) return;
 
-  // Render message + Yes/No buttons
   content.innerHTML = `
     <p id="popupMessage">${message}</p>
     <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -164,21 +192,19 @@ function confirmPopup(message, onYes, onNo = () => { }) {
       <button class="btn" id="popupNo">No</button>
     </div>
   `;
-  els.popup.classList.remove('hidden');
+  popup.classList.remove('hidden');
 
   const yesBtn = content.querySelector('#popupYes');
   const noBtn = content.querySelector('#popupNo');
 
   const cleanup = () => {
-    els.popup.classList.add('hidden');
-    // Restore original content (OK button) for non-confirm popups
+    popup.classList.add('hidden');
     content.innerHTML = `
       <p id="popupMessage"></p>
       <button class="btn" id="popupOk">OK</button>
     `;
-    // Rebind default OK
     const ok = content.querySelector('#popupOk');
-    ok?.addEventListener('click', () => els.popup.classList.add('hidden'));
+    ok?.addEventListener('click', () => popup.classList.add('hidden'));
   };
 
   yesBtn.addEventListener('click', async () => {
@@ -193,6 +219,13 @@ function confirmPopup(message, onYes, onNo = () => { }) {
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id)?.classList.add('active');
+
+  // Toggle search/filter visibility
+  if (id === 'catalogPage') {
+    els.actions.classList.remove('hidden');
+  } else {
+    els.actions.classList.add('hidden');
+  }
 }
 
 /* ------------------------- Back button logic --------------------- */
@@ -202,22 +235,58 @@ function goBack() {
   if (current.startsWith('#/edit/')) {
     const id = current.split('/')[2];
     location.hash = `#/item/${id}`;
+
   } else if (current.startsWith('#/item/')) {
-    location.hash = '#/home';
+    if (state.fromStats) {
+      // ✅ If we came from stats, go back to stats type view
+      location.hash = `#/stats/${encodeURIComponent(state.statsFilter.type)}`;
+    } else if (state.fromList) {
+      // ✅ If we came from a list, go back to that list detail
+      location.hash = `#/lists/${state.currentListId}`;
+    } else {
+      // Normal case → go home
+      location.hash = '#/home';
+    }
+
   } else if (current.startsWith('#/lists/')) {
+    // Reset list filter when leaving detail → overview
+    state.listFilter.q = '';
+    state.listFilter.type = '';
+    els.listSearchInput.value = '';
+    els.listTypeFilter.value = '';
     location.hash = '#/lists';
-  } else if (current.startsWith('#/lists')) {
+
+  } else if (current === '#/lists') {
+    // Reset catalog filter when leaving list overview → home
+    state.catalogFilter.q = '';
+    state.catalogFilter.type = '';
+    els.searchInput.value = '';
+    els.typeFilter.value = '';
     location.hash = '#/home';
-  } else if (current.startsWith('#/add')) {
+
+  } else if (current.startsWith('#/new')) {
+    // ✅ Reset both catalog and stats filters when leaving new item page
+    state.catalogFilter.q = '';
+    state.catalogFilter.type = '';
+    state.statsFilter.q = '';
+    state.statsFilter.type = '';
+    els.searchInput.value = '';
+    els.typeFilter.value = '';
+    state.fromStats = false;   // clear stats context
+    state.fromList = false;    // clear list context
     location.hash = '#/home';
+
   } else if (current.startsWith('#/stats/')) {
     // ✅ From filtered stats → go back to stats overview
     location.hash = '#/stats';
+
   } else if (current.startsWith('#/stats')) {
-    // ✅ From stats overview → go back to home (Filter Reset)
-    state.filter.q = '';
-    state.filter.type = '';
+    // ✅ From stats overview → go back to home (reset stats filter)
+    state.statsFilter.q = '';
+    state.statsFilter.type = '';
+    state.fromStats = false;   // clear stats context
     location.hash = '#/home';
+
   } else {
     location.hash = '#/home';
   }
@@ -255,7 +324,7 @@ function route() {
     openStatsPage(type);               // show stats filtered by that type
   } else if (hash.startsWith('#/stats')) {
     openStatsPage();                   // stats overview
-  } else if (hash.startsWith('#/add')) {
+  } else if (hash.startsWith('#/new')) {
     openAddItemPage();
   } else if (hash.startsWith('#/home')) {
     openCatalogPage();
@@ -266,7 +335,6 @@ function route() {
 
 
 /* ------------------------- Data load ---------------------------- */
-
 async function loadData() {
   state.items = await getAll('items');
   state.lists = await getAll('lists');
@@ -294,6 +362,13 @@ async function loadData() {
     });
     state.items = await getAll('items');
   }
+}
+
+/* ------------------------- Filter Suggestion Helper ---------------------------- */
+function updateTypeSuggestions() {
+  const types = [...new Set(state.items.map(i => (i.type || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  els.typeSuggestions.innerHTML = types.map(t => `<option value="${t}"></option>`).join('');
 }
 
 /* ------------------------- Poster Lookup ------------------------- */
@@ -401,7 +476,8 @@ async function importCsvFile(file) {
 function openCatalogPage() {
   showPage('catalogPage');
   renderCatalog();
-    // Always hide the stats back button on home
+  state.fromList = false;   // ✅ reset this flag
+  state.fromStats = false;  // ✅ reset when going home
   const backBtn = document.getElementById('backToStatsBtn');
   if (backBtn) backBtn.style.display = 'none';
 }
@@ -417,11 +493,13 @@ function renderCatalog() {
   const grid = document.getElementById('catalogGrid');
   grid.innerHTML = '';
 
-  const isUnknownFilter = state.filter.type === 'Unknown';
+  // Decide which filter to use
+  const activeFilter = state.fromStats ? state.statsFilter : state.catalogFilter;
 
-  // Apply search & filter before rendering
+  const isUnknownFilter = activeFilter.type === 'Unknown';
+
   const filtered = state.items.filter(item => {
-    const q = (state.filter.q || '').toLowerCase();
+    const q = (activeFilter.q || '').toLowerCase();
 
     const customSearch = item.custom
       ? Object.values(item.custom).join(' ').toLowerCase()
@@ -430,7 +508,6 @@ function renderCatalog() {
     const searchable = [
       item.title,
       item.year,
-      item.type,
       item.format,
       item.region,
       item.audio,
@@ -449,18 +526,20 @@ function renderCatalog() {
 
     const matchesSearch = !q || searchable.includes(q);
 
-    // Unknown = items with no type AND no format (trimmed)
     const isUnknownItem =
       (!item.type || !item.type.trim()) &&
       (!item.format || !item.format.trim());
 
+    const filterType = (activeFilter.type || '').toLowerCase();
+
     const matchesType =
-      state.filter.type === '' ||
-      (!isUnknownFilter && item.type === state.filter.type) ||
+      filterType === '' ||
+      (!isUnknownFilter && (item.type || '').toLowerCase() === filterType) ||
       (isUnknownFilter && isUnknownItem);
 
     return matchesSearch && matchesType;
   });
+
 
   filtered.forEach(item => {
     const card = document.createElement('div');
@@ -610,10 +689,13 @@ function updateSelectionToolbar(forceVisible = null) {
   bar.classList.toggle('visible', shouldShow);
 }
 
-// Status Page click helper
+// Status Page card click helper
 function onStatsCardClick(type) {
-  state.filter.type = type;
-  location.hash = `#/stats/${encodeURIComponent(type)}`;
+  card.addEventListener('click', () => {
+    state.statsFilter.type = type;
+    state.fromStats = true;   // ✅ mark that we came from stats
+    location.hash = `#/stats/${encodeURIComponent(type)}`;
+  });
 
   // Clear and add back button container
   const grid = document.getElementById('catalogGrid');
@@ -659,12 +741,11 @@ function renderStatsGrid() {
 
     card.addEventListener('click', () => {
       if (type === 'Unknown') {
-        // filter items with no type/format
-        state.filter.type = '';
-        state.filter.format = '';
+        state.statsFilter.type = 'Unknown';
       } else {
-        state.filter.type = type;
+        state.statsFilter.type = type;
       }
+      state.fromStats = true;
       location.hash = `#/stats/${encodeURIComponent(type)}`;
     });
 
@@ -680,12 +761,45 @@ function bindSelectionToolbar() {
   });
 
   document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
-    for (const id of state.selectedIds) {
-      await del('items', id);
+    if (state.selectedIds.size === 0) return;
+
+    confirmPopup(
+      `Delete ${state.selectedIds.size} selected item(s)?`,
+      async () => {
+        // ✅ proceed with deletion
+        for (const id of state.selectedIds) {
+          await del('items', id);
+        }
+        state.items = await getAll('items');
+        exitSelectionMode();
+        showPopup('Selected items deleted');
+      },
+      () => {
+        // ❌ user cancelled
+        exitSelectionMode();
+      }
+    );
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Delete' && state.selectionMode && state.selectedIds.size > 0) {
+      confirmPopup(
+        `Delete ${state.selectedIds.size} selected item(s)?`,
+        async () => {
+          // ✅ proceed with deletion
+          for (const id of state.selectedIds) {
+            await del('items', id);
+          }
+          state.items = await getAll('items');
+          exitSelectionMode();
+          showPopup('Selected items deleted');
+        },
+        () => {
+          // ❌ user cancelled
+          exitSelectionMode();
+        }
+      );
     }
-    state.items = await getAll('items');
-    exitSelectionMode();
-    showPopup('Selected items deleted');
   });
 
   document.getElementById('cancelSelectionBtn').addEventListener('click', () => {
@@ -700,7 +814,7 @@ function bindSelectionToolbar() {
   });
 }
 
-/* ------------------------- Detail ------------------------------- */
+// Detail Page
 function openDetailPage(id) {
   const item = state.items.find(i => i.id === id);
   if (!item) { location.hash = '#/home'; return; }
@@ -735,36 +849,56 @@ function openDetailPage(id) {
   `;
 
   // Rebind dynamic refs
+  // After rendering detail page HTML:
   els.detailListPicker = document.getElementById('detailListPicker');
   els.detailAddToList = document.getElementById('detailAddToList');
 
-  populateListPicker();
+  populateListPicker(); // guarded version
 
-  // Bind Add to list now that element exists
   els.detailAddToList?.addEventListener('click', async () => {
     const val = els.detailListPicker?.value;
-    if (!val) return;
-    let list;
-    if (val === '__new') {
-      inputPopup('Enter new list name:', async (name) => {
-        const id = await put('lists', { name, itemIds: [] });
-        state.lists = await getAll('lists');
-        const list = state.lists.find(l => l.id === id);
-        list.itemIds = Array.from(new Set([...(list.itemIds || []), state.currentItemId]));
-        await put('lists', list);
-        state.lists = await getAll('lists');
-        populateListPicker();
-        showPopup('Added to new list');
-      });
-      return; // stop here, handled by popup
-    } else {
-      list = state.lists.find(l => l.id === Number(val));
+    if (!val) {
+      showPopup('Please select a list or create a new one.');
+      return;
     }
-    list.itemIds = Array.from(new Set([...(list.itemIds || []), state.currentItemId]));
+
+    // New list flow
+    if (val === '__new') {
+      inputPopup(
+        'Enter new list name:',
+        async (name) => {
+          const id = await put('lists', { name, itemIds: [] });
+          state.lists = await getAll('lists');
+          const list = state.lists.find(l => l.id === id);
+          list.itemIds = Array.from(new Set([...(list.itemIds || []), state.currentItemId]));
+          await put('lists', list);
+          state.lists = await getAll('lists');
+          populateListPicker();
+        },
+        () => { },
+        'Item added to new list "{name}"' // ✅ success message template
+      );
+      return;
+    }
+
+    // Existing list flow
+    const list = state.lists.find(l => l.id === Number(val));
+    if (!list) {
+      showPopup('Selected list not found');
+      return;
+    }
+
+    if ((list.itemIds || []).includes(state.currentItemId)) {
+      showPopup(`"${list.name}" already contains this item`);
+      return;
+    }
+
+    list.itemIds = list.itemIds || [];
+    list.itemIds.push(state.currentItemId);
     await put('lists', list);
     state.lists = await getAll('lists');
     populateListPicker();
-    showPopup('Added to list');
+    showPopup(`Item added to list "${list.name}"`);
   });
 }
 
@@ -824,6 +958,7 @@ function formatLabel(key) {
 }
 
 function populateListPicker() {
+  if (!els.detailListPicker) return;
   els.detailListPicker.innerHTML =
     `<option value="">-- Select list --</option>` +
     state.lists.map(l => `<option value="${l.id}">${l.name}</option>`).join('') +
@@ -832,7 +967,11 @@ function populateListPicker() {
 
 /* ------------------------- Edit -------------------------------- */
 function openEditPage(id = null) {
+    // ✅ Reset navigation context so stats/list flags don’t leak into /new
+  state.fromStats = false;
+  state.fromList = false;
   showPage('editPage');
+  
   const isEdit = !!id;
   els.editDelete.style.display = isEdit ? 'inline-block' : 'none';
   state.currentItemId = isEdit ? id : null;
@@ -956,8 +1095,12 @@ async function saveItem(e) {
     const finalId = isEdit ? state.currentItemId : returnedId;
 
     state.items = await getAll('items');
+    state.fromList = false;
     state.currentItemId = finalId;
-
+    
+    /* Popup - if needed
+    showPopup(`Item "${item.title}" saved`);
+    */
     // Navigate to detail of the saved item
     location.hash = `#/item/${finalId}`;
 
@@ -994,68 +1137,67 @@ async function deleteItem() {
 
 /* ------------------------- Lists -------------------------------- */
 function openListsPage() {
+  state.fromList = false; // reset flag when viewing all lists
+  state.fromStats = false; // reset stats context
   showPage('listsPage');
   renderLists();
 }
 
 function renderLists() {
-  els.listsContainer.innerHTML = state.lists.map(l => `
-    <div class="list-card" data-id="${l.id}">
-      <h3>${l.name}</h3>
-      <p class="muted">${(l.itemIds || []).length} items</p>
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        ${(l.itemIds || []).slice(0, 6).map((id) => {
-    const it = state.items.find((x) => x.id === id);
-    return it ? `<img src="${it.poster || ''}" alt="" class="poster-mini" />` : '';
-  }).join('')}
+  showPage('listsPage');
+
+  els.listsContainer.innerHTML = state.lists.map(l => {
+    const items = (l.itemIds || [])
+      .map(id => state.items.find(i => i.id === id))
+      .filter(Boolean);
+
+    const posters = items.slice(0, 1) // show up to 4 posters
+      .map(it => `<img src="${it.poster || 'assets/icons/placeholder.png'}" alt="" class="poster-mini">`)
+      .join('');
+
+    return `
+      <div class="list-card" data-id="${l.id}">
+        <h3>${l.name}</h3>
+        <p class="muted">${items.length} items</p>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          ${posters}
+        </div>
       </div>
-    </div>
-  `).join('');
-  Array.from(els.listsContainer.querySelectorAll('.list-card')).forEach(card => {
-    card.addEventListener('click', () => {
-      location.hash = `#/lists/${card.dataset.id}`;
+    `;
+  }).join('');
+
+  // ✅ Bind click handlers
+  els.listsContainer.querySelectorAll('.list-card').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = Number(el.dataset.id);
+      openListDetailPage(id);
     });
   });
 }
 
-function openListDetailPage(id) {
-  const list = state.lists.find(l => l.id === id);
-  if (!list) { location.hash = '#/lists'; return; }
-  state.currentListId = id;
-  showPage('listDetailPage');
-  els.listTitle.textContent = list.name;
-  els.listMeta.textContent = `${(list.itemIds || []).length} items`;
+function renderAddPicker(list) {
+  // Use list-specific filter state
+  const q = (state.listFilter?.q || '').toLowerCase();
+  const filterType = (state.listFilter?.type || '').toLowerCase();
 
-  const items = (list.itemIds || []).map(id => state.items.find(i => i.id === id)).filter(Boolean);
-  els.listItems.innerHTML = items.map(it => `
-    <div class="card">
-      ${it.poster ? `<img src="${it.poster}" alt="${it.title}" />` : ''}
-      <div class="pad">
-        <strong>${it.title} <span class="muted">${it.year || ''}</span></strong>
-        <div class="muted">${it.type || it.format || ''}</div>
-        <div class="muted">${[it.region, it.audio].filter(Boolean).join(' • ')}</div>
-        <div class="muted">${it.runtime || ''}${it.genre ? ' • ' + it.genre : ''}</div>
-        <div style="display:flex; gap:6px; margin-top:6px;">
-          <button class="btn" onclick="location.hash='#/item/${it.id}'">Open</button>
-          <button class="btn danger" data-remove-id="${it.id}">Remove</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
-  Array.from(els.listItems.querySelectorAll('[data-remove-id]')).forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const removeId = Number(btn.dataset.removeId);
-      list.itemIds = (list.itemIds || []).filter(x => x !== removeId);
-      await put('lists', list);
-      state.lists = await getAll('lists');
-      openListDetailPage(id);
-    });
+  // Build the not-in-list collection
+  const notInList = state.items.filter(i => {
+    if ((list.itemIds || []).includes(i.id)) return false;
+
+    // Search only title, year, format, genre (exclude type to avoid overlap)
+    const searchable = [i.title, i.year, i.format, i.genre]
+      .filter(Boolean).join(' ').toLowerCase();
+
+    const matchesSearch = !q || searchable.includes(q);
+    const matchesType = !filterType || (i.type || '').toLowerCase() === filterType;
+
+    return matchesSearch && matchesType;
   });
 
-  const notInList = state.items.filter(i => !(list.itemIds || []).includes(i.id));
+  // Render cards
   els.listAddPicker.innerHTML = notInList.map(i => `
     <div class="card">
-      ${i.poster ? `<img src="${i.poster}" alt="${i.title}" />` : ''}
+      <img src="${i.poster || 'assets/icons/placeholder.png'}" alt="${i.title}" />
       <div class="pad">
         <div style="display:flex; align-items:center; justify-content:space-between;">
           <div>
@@ -1068,6 +1210,8 @@ function openListDetailPage(id) {
       </div>
     </div>
   `).join('');
+
+  // Bind add buttons
   Array.from(els.listAddPicker.querySelectorAll('[data-add-id]')).forEach(btn => {
     btn.addEventListener('click', async () => {
       const addId = Number(btn.dataset.addId);
@@ -1075,64 +1219,170 @@ function openListDetailPage(id) {
       if (!list.itemIds.includes(addId)) list.itemIds.push(addId);
       await put('lists', list);
       state.lists = await getAll('lists');
-      openListDetailPage(id);
+      openListDetailPage(list.id);
     });
   });
 }
 
-async function createList() {
-  const name = prompt('List name');
-  if (!name) return;
-  const list = { name, itemIds: [] };
-  const id = await put('lists', list);
-  state.lists = await getAll('lists');
-  location.hash = `#/lists/${id}`;
+// Filter Suggestions
+function updateListTypeSuggestions() {
+  const types = [...new Set(state.items.map(i => i.type).filter(Boolean))];
+  els.listTypeSuggestions.innerHTML = types.map(t => `<option value="${t}"></option>`).join('');
 }
 
+function openListDetailPage(id) {
+  const list = state.lists.find(l => l.id === id);
+  if (!list) { location.hash = '#/lists'; return; }
+  state.currentListId = id;
+  state.fromList = true;
+  state.fromStats = false;
+  location.hash = `#/lists/${id}`;
+
+  showPage('listDetailPage');
+  els.listTitle.textContent = list.name;
+  els.listMeta.textContent = `${(list.itemIds || []).length} items`;
+
+  // render items already in the list
+  const items = (list.itemIds || [])
+    .map(id => state.items.find(i => i.id === id))
+    .filter(Boolean);
+
+  els.listItems.innerHTML = items.map(it => `
+    <div class="card" data-id="${it.id}">
+      <img src="${it.poster || 'assets/icons/placeholder.png'}" alt="${it.title}" />
+      <div class="pad">
+        <strong>${it.title} <span class="muted">${it.year || ''}</span></strong>
+        <div class="muted">${it.type || it.format || ''}</div>
+        <div class="muted">${[it.region, it.audio].filter(Boolean).join(' • ')}</div>
+        <div class="muted">${it.runtime || ''}${it.genre ? ' • ' + it.genre : ''}</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <button class="btn danger" data-remove-id="${it.id}">Remove</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // bind click on item cards to open item detail
+Array.from(els.listItems.querySelectorAll('.card[data-id]')).forEach(card => {
+  card.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-remove-id]')) { // avoid conflict with Remove button
+      const id = card.dataset.id;
+      location.hash = `#/item/${id}`;
+    }
+  });
+});
+
+  // remove buttons
+  Array.from(els.listItems.querySelectorAll('[data-remove-id]')).forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const removeId = Number(btn.dataset.removeId);
+      list.itemIds = (list.itemIds || []).filter(x => x !== removeId);
+      await put('lists', list);
+      state.lists = await getAll('lists');
+      openListDetailPage(id);
+    });
+  });
+  // ✅ Initial render of Add Picker
+  updateListTypeSuggestions();
+  renderAddPicker(list);
+}
+
+// Create new list
+async function createList() {
+  inputPopup('Enter new list name:', async (name) => {
+    const id = await put('lists', { name, itemIds: [] });
+    state.lists = await getAll('lists');
+
+    const newListEl = document.createElement('div');
+    newListEl.className = 'list-card';
+    newListEl.dataset.id = id;
+    newListEl.innerHTML = `
+      <h3>${name}</h3>
+      <p class="muted">0 items</p>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    `;
+    els.listsContainer.appendChild(newListEl);
+
+    newListEl.addEventListener('click', () => openListDetailPage(id));
+
+    showPopup(`New list "${name}" created`);
+  }, null, 'New list "{name}" created');
+}
+
+// Rename current list
 async function renameList() {
   const list = state.lists.find(l => l.id === state.currentListId);
   if (!list) return;
-  const name = prompt('New list name', list.name);
-  if (!name) return;
-  list.name = name;
-  await put('lists', list);
-  state.lists = await getAll('lists');
-  openListDetailPage(list.id);
+
+  inputPopup('Enter new name for this list:', async (name) => {
+    list.name = name;
+    await put('lists', list);
+    state.lists = await getAll('lists');
+
+    // Update overview card
+    const el = els.listsContainer.querySelector(`.list-card[data-id="${list.id}"] h3`);
+    if (el) el.textContent = name;
+
+    // Update detail page title immediately
+    els.listTitle.textContent = name;
+
+    showPopup(`List renamed to "${name}"`);
+  }, null, 'List renamed to "{name}"');
 }
 
+// Delete current list
 async function deleteList() {
   const id = state.currentListId;
   if (!id) return;
 
-  confirmPopup('Delete this list?', async () => {
+  const list = state.lists.find(l => l.id === id);
+
+  confirmPopup(`Delete list "${list?.name}"?`, async () => {
     await del('lists', id);
     state.lists = await getAll('lists');
+
+    const el = els.listsContainer.querySelector(`.list-card[data-id="${id}"]`);
+    if (el) el.remove();
+
+    showPopup(`"${list?.name}" list deleted`);
+
+    // ✅ force navigation back to overview
     location.hash = '#/lists';
+    openListsPage();
   });
 }
+
 
 /* ------------------------- Stats -------------------------------- */
 
 function openStatsPage(type) {
   if (type) {
-    state.filter.type = type;          // 'DVD', 'Blu-ray', or 'Unknown'
+    // ✅ set stats filter
+    state.statsFilter.type = (type === 'Unknown') ? 'Unknown' : type;
+    state.statsFilter.q = ''; // clear search when coming from stats
+    state.fromStats = true;
+
     showPage('catalogPage');
-    renderCatalog();
+    renderCatalog(); // will use statsFilter when fromStats is true
 
     const backBtn = document.getElementById('backToStatsBtn');
     if (backBtn) {
-      backBtn.style.display = 'block'; // show only in type view
+      backBtn.style.display = 'block';
       backBtn.onclick = () => { location.hash = '#/stats'; };
     }
   } else {
     showPage('statsPage');
     renderStatsGrid();
-
-    const statsBackBtn = document.getElementById('statsBack');
-    if (statsBackBtn) statsBackBtn.onclick = goBack;
+    state.fromStats = false;
 
     const backBtn = document.getElementById('backToStatsBtn');
-    if (backBtn) backBtn.style.display = 'none'; // hide when not in type view
+    if (backBtn) backBtn.style.display = 'none';
+
+    const statsBackBtn = document.getElementById('statsBack');
+    if (statsBackBtn) {
+      statsBackBtn.onclick = goBack;
+    }
   }
 }
 
@@ -1140,15 +1390,28 @@ function openStatsPage(type) {
 function bindEvents() {
   window.addEventListener('hashchange', route);
 
-  // Search filters
-  els.searchInput?.addEventListener('input', (e) => {
-    state.filter.q = e.target.value.trim().toLowerCase();
-    renderCatalog();
-  });
-  els.typeFilter?.addEventListener('input', (e) => {
-    state.filter.type = e.target.value.trim();
-    renderCatalog();
-  });
+// Catalog filters
+els.searchInput?.addEventListener('input', (e) => {
+  state.catalogFilter.q = e.target.value.trim().toLowerCase();
+  renderCatalog();
+});
+els.typeFilter?.addEventListener('input', (e) => {
+  state.catalogFilter.type = e.target.value.trim();
+  renderCatalog();
+});
+
+// List detail filters
+els.listSearchInput?.addEventListener('input', (e) => {
+  state.listFilter.q = e.target.value.trim().toLowerCase();
+  const list = state.lists.find(l => l.id === state.currentListId);
+  if (list) renderAddPicker(list);
+});
+
+els.listTypeFilter?.addEventListener('input', (e) => {
+  state.listFilter.type = e.target.value.trim();
+  const list = state.lists.find(l => l.id === state.currentListId);
+  if (list) renderAddPicker(list);
+});
 
   // Catalog click 
   els.catalogGrid?.addEventListener('click', (e) => {
@@ -1199,6 +1462,14 @@ function bindEvents() {
     await importCsvFile(els.csvFileInput.files[0]);
   });
 
+    // ✅ CSV file name binding
+  els.csvFileInput?.addEventListener('change', () => {
+    const file = els.csvFileInput.files[0];
+    if (els.fileName) {
+      els.fileName.textContent = file ? file.name : 'Choose CSV file';
+    }
+  });
+
   // ESC → back
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') goBack();
@@ -1208,20 +1479,22 @@ function bindEvents() {
 /* ------------------------- Init ---------------------------------- */
 (async function init() {
   await loadData();
+  updateTypeSuggestions(); // ✅ build dynamic suggestions
   bindEvents();
   bindSelectionToolbar();
 
   // Nav buttons
   els.homeBtn?.addEventListener('click', () => {
-    state.filter.q = '';
-    state.filter.type = '';
+    state.catalogFilter.q = '';
+    state.catalogFilter.type = '';
+    els.searchInput.value = '';  
+    els.typeFilter.value = '';   
     location.hash = '#/home';
   });
   els.listsBtn?.addEventListener('click', () => location.hash = '#/lists');
   els.addBtn?.addEventListener('click', () => location.hash = '#/add');
   els.statsBtn?.addEventListener('click', () => location.hash = '#/stats');
-  els.importCsvBtn?.addEventListener('click', () => location.hash = '#/import');
-
+ 
   // Run router once after init finishes
   route();
 })();
