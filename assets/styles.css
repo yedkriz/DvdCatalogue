@@ -545,6 +545,9 @@ header.nav .actions {
     width: 250px;
     margin: 8px 8px 8px 0;
   }
+#importSectionMargin {
+    margin-bottom: 90px 
+  }
 
 /* Media queries for small screens */
 @media (max-width: 600px) {
@@ -612,6 +615,9 @@ header.nav .actions {
   #apiKeyInput {
     width: -webkit-fill-available;
     margin: 5px 5px 5px 0;
+  }
+  #importSectionMargin {
+    margin-bottom: 30px 
   }
 }
 
