@@ -167,25 +167,8 @@
       <h2>Current Collections</h2>
       <div id="statsGrid" class="list-grid"></div>
 
-      <!-- API Key Input -->
-      <div class="section import-ui apiStatsSection">
-        <h2 class="toolbar-title">TMDB API Key</h2>
-        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Enter API KEY…" />
-        <button id="toggleApiKeyVisibility" class="btn">Show</button>
-        <button id="setApiKeyBtn" class="btn">Add API Key</button>
-        <button id="deleteApiKeyBtn" class="btn danger">Delete API Key</button>
-        <button id="testApiKeyBtn" class="btn">Test API Key</button>
-        <div id="apiKeyStatus" class="muted"></div>
-        <p class="hint">
-          Replace with your own TMDb API key from
-          <a href="https://www.themoviedb.org/documentation/api" target="_blank">
-            TMDb API Documentation
-          </a>
-        </p>
-      </div>
-
       <!-- Import/Export Section -->
-      <div class="section import-ui" id="importSectionMargin">
+      <div class="section import-ui">
         <h2 class="toolbar-title">Import & Export</h2>
 
         <div class="file-toolbar">
@@ -218,6 +201,22 @@
           <div class="progress-label" id="exportProgressLabel">Preparing export...</div>
         </div>
 
+  <!-- API Key Input -->
+      <div id="importSectionMargin" class="section import-ui apiStatsSection">
+        <h2 class="toolbar-title">TMDB API Key</h2>
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Enter API KEY…" />
+        <button id="toggleApiKeyVisibility" class="btn">Show</button>
+        <button id="setApiKeyBtn" class="btn">Add API Key</button>
+        <button id="deleteApiKeyBtn" class="btn danger">Delete API Key</button>
+        <button id="testApiKeyBtn" class="btn">Test API Key</button>
+        <div id="apiKeyStatus" class="muted"></div>
+        <p class="hint">
+          Replace with your own TMDb API key from
+          <a href="https://www.themoviedb.org/documentation/api" target="_blank">
+            TMDb API Documentation
+          </a>
+        </p>
+      </div>
     </section>
   </main>
 
