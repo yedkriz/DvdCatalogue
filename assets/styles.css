@@ -546,7 +546,7 @@ header.nav .actions {
     margin: 8px 8px 8px 0;
   }
 #importSectionMargin {
-    margin-bottom: 90px 
+    margin-bottom: 90px; 
   }
 
 /* Media queries for small screens */
@@ -617,7 +617,7 @@ header.nav .actions {
     margin: 5px 5px 5px 0;
   }
   #importSectionMargin {
-    margin-bottom: 30px 
+    margin-bottom: 30px; 
   }
 }
 
