@@ -1,17 +1,17 @@
 {
   "name": "DVD Catalogue",
   "short_name": "Catalogue",
-  "start_url": "/DvdCatalogue/index.html",
-  "scope": "/DvdCatalogue/",
+  "start_url": "/index.html",
+  "scope": "/",
   "display": "standalone",
   "icons": [
     {
-      "src": "/DvdCatalogue/assets/icons/icon-192.png",
+      "src": "/assets/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/DvdCatalogue/assets/icons/icon-512.png",
+      "src": "/assets/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

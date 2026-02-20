@@ -5,10 +5,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Catalog</title>
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="manifest" href="/DvdCatalogue/assets/manifest.json" />
-  <link rel="icon" href="/DvdCatalogue/assets/icons/icon-192.png" />
-  <link rel="stylesheet" href="/DvdCatalogue/assets/styles.css" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="manifest" href="/assets/manifest.json" />
+  <link rel="icon" href="/assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="/assets/styles.css" />
 
 </head>
 
@@ -21,6 +21,7 @@
       <a href="#/new">Add item</a>
       <a href="#/stats" id="statsBtn">Stats</a>
     </nav>
+
     <!-- Search & Filter -->
     <div id="actions" class="actions">
       <input id="searchInput" type="search" placeholder="Search…" />
@@ -32,6 +33,13 @@
         <option value="Book"></option>
         <option value="Novel"></option>
       </datalist>
+      <div>
+        <div id="posterRefresh" class="progress hidden" style="margin: 0 0 10px 0px;">
+          <div id="posterProgressBar" class="progress-bar"></div>
+          <span id="posterProgressLabel"></span>
+        </div>
+        <button id="syncAllPostersBtn" class="btn">Sync All Posters</button>
+      </div>
     </div>
   </header>
 
@@ -64,7 +72,6 @@
         <div class="spacer"></div>
         <button class="btn" id="detailEdit">Edit</button>
         <button class="btn danger" id="detailDelete">Delete</button>
-
       </div>
       <div id="detailBody"></div>
     </section>
@@ -79,7 +86,7 @@
       </div>
 
       <form id="editForm" class="form">
-        <h2>Edit item</h2>
+        <h2 id="editHeading">Edit item</h2>
 
         <div class="row"><label>Title</label><input id="fTitle" type="text" required /></div>
         <div class="row"><label>Year</label><input id="fYear" type="number" min="0" /></div>
@@ -141,44 +148,79 @@
         <div id="listItems" class="grid"></div>
       </div>
 
-      <div class="list-add-header import-ui" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-  <h2>Add items to this list</h2>
-  <div id="actionsListDetail" class="actions">
-    <input id="listSearchInput" type="search" placeholder="Search…" />
-    <input id="listTypeFilter" list="listTypeSuggestions" placeholder="Filter by type" />
-    <datalist id="listTypeSuggestions"></datalist>
-  </div>
-</div>
+      <div class="list-add-header import-ui"
+        style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <h2>Add items to this list</h2>
+        <div id="actionsListDetail" class="actions">
+          <input id="listSearchInput" type="search" placeholder="Search…" />
+          <input id="listTypeFilter" list="listTypeSuggestions" placeholder="Filter by type" />
+          <datalist id="listTypeSuggestions"></datalist>
+        </div>
+      </div>
 
-<div id="listAddPicker" class="grid"></div>
+      <div id="listAddPicker" class="grid"></div>
     </section>
 
-<!-- Stats page -->
-<section id="statsPage" class="page">
-  <button class="btn" id="statsBack">← Back</button>
-  <h2>Current Collections</h2>
-  <div id="statsGrid" class="list-grid"></div>
+    <!-- Stats page -->
+    <section id="statsPage" class="page">
+      <button class="btn" id="statsBack">← Back</button>
+      <h2>Current Collections</h2>
+      <div id="statsGrid" class="list-grid"></div>
 
-<div class="section import-ui">
-  <h2 class="toolbar-title">Import & Export</h2>
+      <!-- API Key Input -->
+      <div class="section import-ui apiStatsSection">
+        <h2 class="toolbar-title">TMDB API Key</h2>
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Enter API KEY…" />
+        <button id="toggleApiKeyVisibility" class="btn">Show</button>
+        <button id="setApiKeyBtn" class="btn">Add API Key</button>
+        <button id="deleteApiKeyBtn" class="btn danger">Delete API Key</button>
+        <button id="testApiKeyBtn" class="btn">Test API Key</button>
+        <div id="apiKeyStatus" class="muted"></div>
+        <p class="hint">
+          Replace with your own TMDb API key from
+          <a href="https://www.themoviedb.org/documentation/api" target="_blank">
+            TMDb API Documentation
+          </a>
+        </p>
+      </div>
 
-  <div class="file-toolbar">
-    <label for="csvFileInput" class="file-label">
-      <span class="material-icons">description</span>
-      <span id="fileName">Choose CSV file</span>
-    </label>
-    <input type="file" id="csvFileInput" accept=".csv" hidden />
+      <!-- Import/Export Section -->
+      <div class="section import-ui">
+        <h2 class="toolbar-title">Import & Export</h2>
 
-    <button class="btn primary" id="importCsvBtn">
-      <span class="material-icons">upload</span> Import
-    </button>
-    <button class="btn" id="exportCsvBtn">
-      <span class="material-icons">download</span> Export
-    </button>
-  </div>
-</div>
+        <div class="file-toolbar">
+          <label for="csvFileInput" class="file-label">
+            <span class="material-icons">description</span>
+            <span id="fileName">Choose CSV file</span>
+          </label>
+          <input type="file" id="csvFileInput" accept=".csv" hidden />
 
-</section>
+          <button class="btn primary" id="importCsvBtn">
+            <span class="material-icons">upload</span> Import
+          </button>
+          <button class="btn" id="exportCsvBtn">
+            <span class="material-icons">download</span> Export
+          </button>
+        </div>
+
+
+
+        <!-- Progress bars -->
+        <div class="progress-wrapper hidden" id="importProgress">
+          <div class="progress-container">
+            <div class="progress-bar" id="importProgressBar"></div>
+          </div>
+          <div class="progress-label" id="importProgressLabel">Uploading file...</div>
+        </div>
+
+        <div class="progress-wrapper hidden" id="exportProgress">
+          <div class="progress-container">
+            <div class="progress-bar" id="exportProgressBar"></div>
+          </div>
+          <div class="progress-label" id="exportProgressLabel">Preparing export...</div>
+        </div>
+
+    </section>
   </main>
 
   <div id="popup" class="popup hidden">
@@ -187,11 +229,18 @@
       <button class="btn" id="popupOk">OK</button>
     </div>
   </div>
+  <div class="popup hidden" id="exportOptionsPopup">
+    <div class="popup-content">
+      <h3>Select Export Scope</h3>
+      <div id="exportOptionsList"></div>
+      <button class="popup-close">Cancel</button>
+    </div>
+  </div>
 
-  <script type="module" src="/DvdCatalogue/assets/app.js"></script>
+  <script type="module" src="/assets/app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/DvdCatalogue/assets/service-worker.js');
+      navigator.serviceWorker.register('/assets/service-worker.js');
     }
   </script>
 </body>

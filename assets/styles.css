@@ -180,6 +180,10 @@ main {
   margin-bottom: 8px;
 }
 
+#refreshItemPosterBtn{
+display: block; 
+margin: 10px 0 0;
+}
 .section {
   margin-top: 16px;
 }
@@ -255,7 +259,9 @@ main {
 /*Popup Alert*/
 .popup {
   position: fixed;
-  inset: 0;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
@@ -270,6 +276,46 @@ main {
   background: var(--card);
   padding: 20px;
   border-radius: 8px;
+  min-width: 280px;
+
+}
+
+.export-option {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;   /* ✅ no bg by default */
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.export-option:hover {
+  background: var(--accent); /* ✅ accent bg on hover */
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.popup-close {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  
+  background: var(--accent);color: var(--fg);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.popup-close:hover {
+  background: #ff5c5c;   /* ✅ matches other buttons */
+  border: var(--border);
+  color: #fff;
 }
 
 .btn.loading {
@@ -492,6 +538,14 @@ header.nav .actions {
   max-width: 160px; /* 160px to keep inputs compact */
 }
 
+.apiStatsSection .btn {
+    margin: 8px 8px 8px 0;
+  }
+  #apiKeyInput {
+    width: 250px;
+    margin: 8px 8px 8px 0;
+  }
+
 /* Media queries for small screens */
 @media (max-width: 600px) {
   body {
@@ -508,7 +562,9 @@ header.nav .actions {
   .page-header .spacer {
     display: none;
   }
-
+.detail-layout {
+  flex-direction: column;
+}
   .form .row, .form .row-inline {
     flex-direction: column;
     align-items: stretch;
@@ -549,57 +605,35 @@ header.nav .actions {
     min-width: 0;
     max-width: none;
   }
+
+  .apiStatsSection .btn {
+    margin: 5px 5px 5px 0;
+  }
+  #apiKeyInput {
+    width: -webkit-fill-available;
+    margin: 5px 5px 5px 0;
+  }
 }
 
-/* Import | Export*/
+/* Section styling */
 .import-ui {
-    border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   padding-top: 20px;
   margin-top: 30px;
-
-}
-
-.import-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-
-/* Header styling */
-.toolbar-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.toolbar-header .material-icons {
-  color: var(--accent);
-  font-size: 22px;
-}
-
-.toolbar-icon {
-  font-size: 1.4em;
-  color: var(--accent);
 }
 
 .toolbar-title {
+  margin: 0 0 12px 0;
+  font-size: 1.4em; /* same as Current Collections */
+  font-weight: 600;
   color: var(--fg);
 }
 
-
+/* Toolbar */
 .file-toolbar {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-
-.file-toolbar .material-icons {
-  font-size: 18px;
-  vertical-align: middle;
-  margin-right: 4px;
 }
 
 .file-label {
@@ -619,20 +653,56 @@ header.nav .actions {
   color: #fff;
   border-color: var(--accent);
 }
-.file-icon {
-  font-size: 1.2em;
+.file-label .material-icons {
+  font-size: 18px;
 }
 
-#exportCsvBtn {
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  transition: background 0.2s ease, border-color 0.2s ease;
+/* Progress wrapper groups bar + label */
+.progress-wrapper {
+  width: 100%;        /* full width */
+  max-width: 300px;
+  margin-top: 16px;
 }
-#exportCsvBtn:hover {
+
+/* Bar container */
+.progress-container {
+  width: 100%;          /* bar fills wrapper */
+  background: var(--border);
+  border-radius: 6px;
+  height: 14px;
+  margin-bottom: 6px;   /* spacing before label */
+  overflow: hidden;
+}
+
+/* Progress bar itself */
+.progress-bar {
+  height: 100%;
+  width: 0%;
   background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  transition: width 0.3s ease;
+}
+
+/* Label below bar */
+.progress-label {
+  font-size: 0.9em;
+  color: var(--fg);
+  text-align: left; /* or center if you prefer */
+}
+
+/* Indeterminate animation */
+.progress-bar.indeterminate {
+  width: 30%;
+  animation: indeterminate 1.2s infinite linear;
+}
+
+@keyframes indeterminate {
+  0%   { margin-left: -30%; }
+  50%  { margin-left: 50%; }
+  100% { margin-left: 100%; }
+}
+
+.hidden {
+  display: none;
 }
 
 

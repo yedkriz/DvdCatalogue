@@ -101,7 +101,10 @@ const els = {
   // CSV import controls
   csvFileInput: document.getElementById('csvFileInput'),
   importCsvBtn: document.getElementById('importCsvBtn'),
-  fileName: document.getElementById('fileName')
+  fileName: document.getElementById('fileName'),
+
+  // CSV export controls
+  exportCsvBtn: document.getElementById('exportCsvBtn')  
 };
 
 const state = {
@@ -373,16 +376,33 @@ function updateTypeSuggestions() {
 
 /* ------------------------- Poster Lookup ------------------------- */
 // Replace with your own TMDb API key from https://www.themoviedb.org/documentation/api
-const TMDB_API_KEY = "ebdcb5147e5c52171c2f65b14104a803";
-
 async function fetchPosterUrl(title, year) {
-  if (!title) return "";
+  const TMDB_API_KEY = localStorage.getItem('tmdbApiKey') || "";
+  if (!title || !TMDB_API_KEY) return "";
+
   try {
     const query = encodeURIComponent(title);
     const yearParam = year ? `&year=${year}` : "";
-    const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${query}${yearParam}`;
-    const res = await fetch(url);
-    const data = await res.json();
+
+    // First try movie search
+    let url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${query}${yearParam}`;
+    let res = await fetch(url);
+    let data = await res.json();
+
+    // If no movie results, fallback to TV search
+    if (!data.results || data.results.length === 0) {
+      url = `https://api.themoviedb.org/3/search/tv?api_key=${TMDB_API_KEY}&query=${query}`;
+      res = await fetch(url);
+      data = await res.json();
+    }
+
+    // If no tv results, fallback to Collections search
+    if (!data.results || data.results.length === 0) {
+      url = `https://api.themoviedb.org/3/search/collection?api_key=${TMDB_API_KEY}&query=${query}`;
+      res = await fetch(url);
+      data = await res.json();
+    }
+
     if (data.results && data.results.length > 0) {
       const posterPath = data.results[0].poster_path;
       return posterPath ? `https://image.tmdb.org/t/p/w342${posterPath}` : "";
@@ -391,6 +411,53 @@ async function fetchPosterUrl(title, year) {
     console.error("Poster lookup failed:", err);
   }
   return "";
+}
+
+/*-------------------------- Sync All Poster --------------------------------------*/
+async function refreshMissingPosters() {
+  for (const item of state.items) {
+    if (!item.poster || item.poster.includes('placeholder.png')) {
+      const year = item.custom?.ReleaseDate ? new Date(item.custom.ReleaseDate).getFullYear() : item.year;
+      const newPoster = await fetchPosterUrl(item.title, year);
+      if (newPoster) {
+        item.poster = newPoster;
+        await put('items', item); // update DB
+      }
+    }
+  }
+  state.items = await getAll('items');
+  renderCatalog();
+  if (typeof renderStatsGrid === 'function') renderStatsGrid();
+}
+
+/*-------------------------- Detail Page Item Poster --------------------------------------*/
+async function refreshPosterForItem(itemId, force = false) {
+  const item = await get('items', itemId);
+  if (!item) return;
+
+  if (force || !item.poster || item.poster.includes('placeholder.png')) {
+    const year = item.custom?.ReleaseDate ? new Date(item.custom.ReleaseDate).getFullYear() : item.year;
+    const newPoster = await fetchPosterUrl(item.title, year);
+
+    if (newPoster) {
+      item.poster = newPoster;
+      await put('items', item);
+
+      // ✅ Update state.items in place
+      const idx = state.items.findIndex(i => i.id === itemId);
+      if (idx !== -1) state.items[idx] = item;
+
+      // Update poster in DOM
+      const imgEl = document.querySelector('#detailPage .poster-section img');
+      if (imgEl) imgEl.src = newPoster;
+
+    } else {
+      showPopup("No poster found for this item.");
+    }
+  }
+
+  renderCatalog();
+  if (typeof renderStatsGrid === 'function') renderStatsGrid();
 }
 
 /* ------------------------- CSV Import --------------------------- */
@@ -409,11 +476,14 @@ function parseCsv(text) {
   });
 }
 
-
 async function mapCsvRow(row) {
   const title = row['Title'] || '';
   const year = row['Release date'] ? new Date(row['Release date']).getFullYear() : null;
-  const posterUrl = await fetchPosterUrl(title, year);
+    // ✅ Use Poster column if available
+  let posterUrl = row['Poster'] || '';
+  if (!posterUrl) {
+    posterUrl = await fetchPosterUrl(title, year);
+  }
 
   return {
     title,
@@ -459,17 +529,217 @@ function normalizeType(raw) {
 async function importCsvFile(file) {
   const text = await file.text();
   const rows = parseCsv(text);
+
   // 🔍 Quick debug log — paste here
   console.log("Headers parsed:", Object.keys(rows[0] || {}));
   console.log("First row object:", rows[0]);
 
+  const items = [];
   for (const row of rows) {
     const item = await mapCsvRow(row);
     await put('items', item);
+    items.push(item);
   }
   state.items = await getAll('items');
   renderCatalog();
-  showPopup(`Imported ${rows.length} items from CSV`);
+
+  if (typeof renderStatsGrid === 'function'){
+    renderStatsGrid();
+  }
+  return items.length; // ✅ return count
+}
+
+
+/* ------------------------- Progress Helpers ------------------------- */
+  function startPhase(containerId, barId, labelId, labelText, determinate = true) {
+    const container = document.getElementById(containerId);
+    const bar = document.getElementById(barId);
+    const label = document.getElementById(labelId);
+
+    container.classList.remove('hidden');
+    label.textContent = labelText;
+    bar.classList.remove('indeterminate');
+    bar.style.width = determinate ? '0%' : '30%';
+
+    if (!determinate) {
+      bar.classList.add('indeterminate');
+    }
+  }
+
+  function updatePhase(barId, percent) {
+    const bar = document.getElementById(barId);
+    bar.style.width = percent + '%';
+  }
+
+  function finishPhase(containerId, barId, message) {
+    const container = document.getElementById(containerId);
+    const bar = document.getElementById(barId);
+
+    container.classList.add('hidden');
+    bar.classList.remove('indeterminate');
+    bar.style.width = '0%';
+
+    showPopup(message);
+  }
+
+function runImportFlow(file) {
+  startPhase('importProgress', 'importProgressBar', 'importProgressLabel', 'Uploading file...', true);
+
+  // Simulate upload progress
+  let p = 0;
+  const uploadInterval = setInterval(() => {
+    p += 20;
+    updatePhase('importProgressBar', p);
+    if (p >= 100) {
+      clearInterval(uploadInterval);
+
+      // Switch to processing
+      startPhase('importProgress', 'importProgressBar', 'importProgressLabel', 'Processing file...', false);
+
+      // ✅ Await actual import logic here
+      importCsvFile(file).then((count) => {
+        finishPhase('importProgress', 'importProgressBar', `Imported ${count} items from CSV`);
+      }).catch((err) => {
+        finishPhase('importProgress', 'importProgressBar', `Import failed: ${err.message}`);
+      });
+    }
+  }, 300);
+}
+
+/* ------------------------- Export CSV ------------------------------ */
+function csvEscape(val) {
+  if (val == null) return "";
+  const str = String(val);
+  // Quote only if needed
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`; // escape quotes
+  }
+  return str;
+}
+
+async function exportCsvFile(items, listName = "all") {
+  if (!items || !items.length) {
+    throw new Error("No items to export");
+  }
+
+  const headers = [
+    "Title",
+    "Release date",
+    "Format",
+    "Type",
+    "Country code",
+    "UPC",
+    "EAN",
+    "Comment",
+    "Studio",
+    "ASIN",
+    "Slipcover",
+    "Casing",
+    "Memorabilia",
+    "Blu-ray discs",
+    "DVD discs",
+    "Digital copy",
+    "Date added",
+    "Watched",
+    "Retailer",
+    "Price",
+    "Price comment",
+    "Poster"
+  ];
+
+  const rows = items.map(item => {
+    const c = item.custom || {};
+
+    // ✅ Split barcode into UPC/EAN
+    let upc = "";
+    let ean = "";
+    if (item.barcode) {
+      const digits = item.barcode.replace(/\D/g, "");
+      if (digits.length === 12) {
+        upc = digits;
+      } else if (digits.length === 13) {
+        ean = digits;
+      } else {
+        upc = item.barcode;
+      }
+    }
+
+    return [
+      item.title || "",
+      c.ReleaseDate || "",
+      item.format || "",
+      item.type || "",
+      item.region || "",
+      upc,
+      ean,
+      item.notes || "",
+      c.Studio || "",
+      c.ASIN || "",
+      c.Slipcover || "",
+      c.Casing || "",
+      c.Memorabilia || "",
+      c.BluRayDiscs || "",
+      c.DvdDiscs || "",
+      c.DigitalCopy || "",
+      c.DateAdded || "",
+      c.Watched || "",
+      c.Retailer || "",
+      c.Price || "",
+      c.PriceComment || "",
+      item.poster || ""
+    ].map(csvEscape).join(",");
+  });
+
+  const csvContent = [headers.join(","), ...rows].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+  const safeName = listName.replace(/\s+/g, "-").toLowerCase();
+  const filename = `${safeName}_export_${timestamp}.csv`;
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+
+  return items.length;
+}
+
+// Export Flow
+function runExportFlow(items, listName = "all") {
+  startPhase('exportProgress', 'exportProgressBar', 'exportProgressLabel', 'Preparing export...', true);
+
+  let p = 0;
+  const prepInterval = setInterval(() => {
+    p += 25;
+    updatePhase('exportProgressBar', p);
+    if (p >= 100) {
+      clearInterval(prepInterval);
+
+      startPhase('exportProgress', 'exportProgressBar', 'exportProgressLabel', 'Generating file...', false);
+
+      exportCsvFile(items, listName).then((count) => {
+        // ✅ Friendly message
+        let scopeLabel;
+        if (listName === "all") {
+          scopeLabel = "All Collections";
+        } else {
+          scopeLabel = `${listName} collection`;
+        }
+
+        const msg = `Successfully exported ${count} items from ${scopeLabel} to CSV`;
+        finishPhase('exportProgress', 'exportProgressBar', msg);
+      }).catch((err) => {
+        finishPhase('exportProgress', 'exportProgressBar', `Export failed: ${err.message}`);
+      });
+    }
+  }, 300);
 }
 
 /* ------------------------- Catalog ------------------------------ */
@@ -558,7 +828,8 @@ function renderCatalog() {
     const showBullet = displayYear && displayType ? ' • ' : '';
 
     card.innerHTML = `
-      <img class="poster" src="${displayPoster}" alt="${displayTitle}" />
+      <img class="poster" src="${displayPoster}" alt="${displayTitle}" 
+      onerror="this.onerror=null;this.src='assets/icons/brokenUrlPlaceholder.png';" />
       <div class="card-meta">
         <span class="title">${displayTitle}</span>
         <span class="meta-line">${displayYear}${showBullet}${displayType}</span>
@@ -689,70 +960,6 @@ function updateSelectionToolbar(forceVisible = null) {
   bar.classList.toggle('visible', shouldShow);
 }
 
-// Status Page card click helper
-function onStatsCardClick(type) {
-  card.addEventListener('click', () => {
-    state.statsFilter.type = type;
-    state.fromStats = true;   // ✅ mark that we came from stats
-    location.hash = `#/stats/${encodeURIComponent(type)}`;
-  });
-
-  // Clear and add back button container
-  const grid = document.getElementById('catalogGrid');
-  grid.innerHTML = `
-    <div class="back-bar">
-      <button id="backToStatsBtn">← Back to Stats</button>
-    </div>
-  `;
-
-  // Append catalog items after the back bar
-  renderCatalog();
-
-  // Bind back button safely
-  const backBtn = document.getElementById('backToStatsBtn');
-  if (backBtn) {
-    backBtn.addEventListener('click', () => {
-      showPage('statsPage');
-    });
-  }
-}
-
-// Render Stats Grid 
-function renderStatsGrid() {
-  const grid = document.getElementById('statsGrid');
-  if (!grid) return;
-
-  grid.innerHTML = '';
-
-  const counts = {};
-  state.items.forEach(i => {
-    const t = i.type?.trim() || i.format?.trim() || 'Unknown';
-    counts[t] = (counts[t] || 0) + 1;
-  });
-
-  Object.entries(counts).forEach(([type, count]) => {
-    const card = document.createElement('div');
-    card.className = 'list-card';
-    card.dataset.type = type;
-    card.innerHTML = `
-      <h3>${type}</h3>
-      <p class="muted">${count} items</p>
-    `;
-
-    card.addEventListener('click', () => {
-      if (type === 'Unknown') {
-        state.statsFilter.type = 'Unknown';
-      } else {
-        state.statsFilter.type = type;
-      }
-      state.fromStats = true;
-      location.hash = `#/stats/${encodeURIComponent(type)}`;
-    });
-
-    grid.appendChild(card);
-  });
-}
-
 // Toolbar
 function bindSelectionToolbar() {
   document.getElementById('selectAllBtn').addEventListener('click', () => {
@@ -818,12 +1025,18 @@ function bindSelectionToolbar() {
 function openDetailPage(id) {
   const item = state.items.find(i => i.id === id);
   if (!item) { location.hash = '#/home'; return; }
+  
   state.currentItemId = id;
   showPage('detailPage');
 
+  const displayPoster = item.poster || 'assets/icons/placeholder.png';
   els.detailBody.innerHTML = `
     <div class="detail-layout">
-      ${item.poster ? `<img src="${item.poster}" alt="${item.title}" />` : ''}
+      <div class="poster-section">
+        <img src="${displayPoster}" alt="${item.title}" 
+         onerror="this.onerror=null;this.src='assets/icons/brokenUrlPlaceholder.png';" />
+        <button class="btn" id="refreshItemPosterBtn">Refresh Poster</button>
+      </div> 
       <div class="info">
         <h2>${item.title} <span class="muted">${item.year || ''}</span></h2>
         <p class="muted">${[item.type || item.format, item.region].filter(Boolean).join(' • ')}</p>
@@ -900,6 +1113,14 @@ function openDetailPage(id) {
     populateListPicker();
     showPopup(`Item added to list "${list.name}"`);
   });
+
+  // Bind refresh poster button AFTER HTML is injected
+  const refreshBtn = document.getElementById('refreshItemPosterBtn');
+  refreshBtn?.addEventListener('click', async () => {
+    await refreshPosterForItem(state.currentItemId, true); // force overwrite
+    showPopup("Poster refreshed successfully!");
+  });
+
 }
 
 // Improving Labels
@@ -975,6 +1196,10 @@ function openEditPage(id = null) {
   const isEdit = !!id;
   els.editDelete.style.display = isEdit ? 'inline-block' : 'none';
   state.currentItemId = isEdit ? id : null;
+
+  // ✅ Update heading text
+  const headingEl = document.getElementById('editHeading');
+  headingEl.textContent = isEdit ? "Edit Item" : "Add Item";
 
   if (isEdit) {
     const item = state.items.find(i => i.id === id);
@@ -1152,7 +1377,8 @@ function renderLists() {
       .filter(Boolean);
 
     const posters = items.slice(0, 1) // show up to 4 posters
-      .map(it => `<img src="${it.poster || 'assets/icons/placeholder.png'}" alt="" class="poster-mini">`)
+      .map(it => `<img src="${it.poster || 'assets/icons/placeholder.png'}" alt="" class="poster-mini" 
+        onerror="this.onerror=null;this.src='assets/icons/brokenUrlPlaceholder.png';">`)
       .join('');
 
     return `
@@ -1197,7 +1423,8 @@ function renderAddPicker(list) {
   // Render cards
   els.listAddPicker.innerHTML = notInList.map(i => `
     <div class="card">
-      <img src="${i.poster || 'assets/icons/placeholder.png'}" alt="${i.title}" />
+      <img src="${i.poster || 'assets/icons/placeholder.png'}" alt="${i.title}" 
+      onerror="this.onerror=null;this.src='assets/icons/brokenUrlPlaceholder.png';" />
       <div class="pad">
         <div style="display:flex; align-items:center; justify-content:space-between;">
           <div>
@@ -1249,7 +1476,8 @@ function openListDetailPage(id) {
 
   els.listItems.innerHTML = items.map(it => `
     <div class="card" data-id="${it.id}">
-      <img src="${it.poster || 'assets/icons/placeholder.png'}" alt="${it.title}" />
+      <img src="${it.poster || 'assets/icons/placeholder.png'}" alt="${it.title}" 
+      onerror="this.onerror=null;this.src='assets/icons/brokenUrlPlaceholder.png';" />
       <div class="pad">
         <strong>${it.title} <span class="muted">${it.year || ''}</span></strong>
         <div class="muted">${it.type || it.format || ''}</div>
@@ -1353,7 +1581,6 @@ async function deleteList() {
   });
 }
 
-
 /* ------------------------- Stats -------------------------------- */
 
 function openStatsPage(type) {
@@ -1374,7 +1601,9 @@ function openStatsPage(type) {
   } else {
     showPage('statsPage');
     renderStatsGrid();
+    initStatsPage(); // ✅ refresh API key status
     state.fromStats = false;
+
 
     const backBtn = document.getElementById('backToStatsBtn');
     if (backBtn) backBtn.style.display = 'none';
@@ -1386,9 +1615,151 @@ function openStatsPage(type) {
   }
 }
 
+// Status Page card click helper
+function onStatsCardClick(type) {
+  card.addEventListener('click', () => {
+    state.statsFilter.type = type;
+    state.fromStats = true;   // ✅ mark that we came from stats
+    location.hash = `#/stats/${encodeURIComponent(type)}`;
+  });
+
+  // Clear and add back button container
+  const grid = document.getElementById('catalogGrid');
+  grid.innerHTML = `
+    <div class="back-bar">
+      <button id="backToStatsBtn">← Back to Stats</button>
+    </div>
+  `;
+
+  // Append catalog items after the back bar
+  renderCatalog();
+
+  // Bind back button safely
+  const backBtn = document.getElementById('backToStatsBtn');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      showPage('statsPage');
+    });
+  }
+}
+
+// Render Stats Grid 
+function renderStatsGrid() {
+  const grid = document.getElementById('statsGrid');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  const counts = {};
+  state.items.forEach(i => {
+    const t = i.type?.trim() || i.format?.trim() || 'Unknown';
+    counts[t] = (counts[t] || 0) + 1;
+  });
+
+  Object.entries(counts).forEach(([type, count]) => {
+    const card = document.createElement('div');
+    card.className = 'list-card';
+    card.dataset.type = type;
+    card.innerHTML = `
+      <h3>${type}</h3>
+      <p class="muted">${count} items</p>
+    `;
+
+    card.addEventListener('click', () => {
+      if (type === 'Unknown') {
+        state.statsFilter.type = 'Unknown';
+      } else {
+        state.statsFilter.type = type;
+      }
+      state.fromStats = true;
+      location.hash = `#/stats/${encodeURIComponent(type)}`;
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+// Stats Page - API Initialization
+function initStatsPage() {
+  const savedKey = localStorage.getItem('tmdbApiKey') || "";
+  const statusEl = document.getElementById('apiKeyStatus');
+  const inputEl = document.getElementById('apiKeyInput');
+
+  if (savedKey) {
+    statusEl.textContent = "✅ API key is saved.";
+    statusEl.style.color = "green";   // Green for saved
+    inputEl.value = ""; // keep masked field empty for safety
+  } else {
+    statusEl.textContent = "⚠️ No API key set.";
+    statusEl.style.color = "orange";  // Orange/Yellow for missing
+  }
+}
+
+
 /* ------------------------- Events -------------------------------- */
 function bindEvents() {
   window.addEventListener('hashchange', route);
+
+// API Key
+document.getElementById('setApiKeyBtn')?.addEventListener('click', () => {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) {
+    showPopup("API key cannot be empty.");
+    return;
+  }
+  localStorage.setItem('tmdbApiKey', key);
+  showPopup("TMDB API key saved successfully!");
+  initStatsPage();
+});
+
+// Delete API Key
+document.getElementById('deleteApiKeyBtn')?.addEventListener('click', () => {
+  localStorage.removeItem('tmdbApiKey');
+  document.getElementById('apiKeyInput').value = "";
+  showPopup("TMDB API key deleted.");
+  initStatsPage();
+});
+
+// API Key - Show/Hide
+document.getElementById('toggleApiKeyVisibility')?.addEventListener('click', () => {
+  const input = document.getElementById('apiKeyInput');
+  if (input.type === "password") {
+    input.type = "text";
+    document.getElementById('toggleApiKeyVisibility').textContent = "Hide";
+  } else {
+    input.type = "password";
+    document.getElementById('toggleApiKeyVisibility').textContent = "Show";
+  }
+});
+
+// API Key - Testing
+document.getElementById('testApiKeyBtn')?.addEventListener('click', async () => {
+  const key = localStorage.getItem('tmdbApiKey');
+  const statusEl = document.getElementById('apiKeyStatus');
+
+  if (!key) {
+    statusEl.textContent = "⚠️ No API key set.";
+    statusEl.style.color = "orange";
+    return;
+  }
+
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${key}&query=Inception`);
+    const data = await res.json();
+
+    if (data && data.results && data.results.length > 0) {
+      statusEl.textContent = "✅ API key is valid.";
+      statusEl.style.color = "green";   // Green for valid
+    } else {
+      statusEl.textContent = "❌ API key is invalid.";
+      statusEl.style.color = "red";     // Red for invalid
+    }
+  } catch (err) {
+    statusEl.textContent = "❌ API key test failed.";
+    statusEl.style.color = "red";
+    console.error(err);
+  }
+});
 
 // Catalog filters
 els.searchInput?.addEventListener('input', (e) => {
@@ -1453,16 +1824,74 @@ els.listTypeFilter?.addEventListener('input', (e) => {
   els.listRename?.addEventListener('click', renameList);
   els.listDelete?.addEventListener('click', deleteList);
 
-  // CSV Import
-  els.importCsvBtn?.addEventListener('click', async () => {
-    if (!els.csvFileInput?.files.length) {
-      showPopup('Please select a CSV file first');
-      return;
-    }
-    await importCsvFile(els.csvFileInput.files[0]);
+  // Import Button Binding
+els.importCsvBtn?.addEventListener('click', () => {
+  if (!els.csvFileInput?.files.length) {
+    showPopup('Please select a CSV file first');
+    return;
+  }
+  const file = els.csvFileInput.files[0];
+  runImportFlow(file);
+});
+
+
+// Export Button Binding
+els.exportCsvBtn?.addEventListener('click', () => {
+  const popup = document.getElementById('exportOptionsPopup');
+  const optionsList = document.getElementById('exportOptionsList');
+  optionsList.innerHTML = '';
+
+  // Always include "All Collections"
+  const allBtn = document.createElement('button');
+  allBtn.textContent = 'All Collections';
+  allBtn.className = 'export-option';
+  allBtn.dataset.scope = 'all';
+  optionsList.appendChild(allBtn);
+
+  // ✅ Build unique type buttons from items
+  const types = [...new Set((state.items || []).map(item => (item.type || item.format || 'Unknown').toLowerCase()))];
+  types.forEach(type => {
+    const btn = document.createElement('button');
+    btn.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    btn.className = 'export-option';
+    btn.dataset.scope = type;
+    optionsList.appendChild(btn);
   });
 
-    // ✅ CSV file name binding
+  popup.classList.remove('hidden');
+
+  // Handle option clicks
+  optionsList.querySelectorAll('.export-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      let itemsToExport = [];
+      let listName = btn.textContent;
+
+      if (btn.dataset.scope === 'all') {
+        itemsToExport = state.items || [];
+        listName = 'all';
+      } else {
+        itemsToExport = state.items.filter(item => (item.type || '').toLowerCase() === btn.dataset.scope);
+      }
+
+          // In popup builder
+  if (btn.dataset.scope === 'unknown') {
+  itemsToExport = state.items.filter(item =>
+    (!item.type || !item.type.trim()) && (!item.format || !item.format.trim())
+  );
+}
+
+      runExportFlow(itemsToExport, listName);
+      popup.classList.add('hidden');
+    });
+  });
+});
+
+// Close popup
+document.querySelector('#exportOptionsPopup .popup-close').addEventListener('click', () => {
+  document.getElementById('exportOptionsPopup').classList.add('hidden');
+});
+
+  // CSV file name binding
   els.csvFileInput?.addEventListener('change', () => {
     const file = els.csvFileInput.files[0];
     if (els.fileName) {
@@ -1474,6 +1903,23 @@ els.listTypeFilter?.addEventListener('input', (e) => {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') goBack();
   });
+
+ // Refresh Item Poster Button 
+document.getElementById('refreshItemPosterBtn')?.addEventListener('click', async () => {
+  await refreshPosterForItem(state.currentItemId, true);
+});
+
+//Sync All Posters
+document.getElementById('syncAllPostersBtn')?.addEventListener('click', async () => {
+  startPhase('posterRefresh', 'posterProgressBar', 'posterProgressLabel', 'Refreshing posters...', true);
+  await refreshMissingPosters();
+  finishPhase('posterRefresh', 'posterProgressBar', 'Poster refresh complete');
+
+  // ✅ Auto refresh UI
+  renderCatalog();
+  if (typeof renderStatsGrid === 'function') renderStatsGrid();
+  if (typeof renderItemDetail === 'function') renderItemDetail(state.currentItemId);
+});
 }
 
 /* ------------------------- Init ---------------------------------- */
